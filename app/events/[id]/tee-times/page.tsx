@@ -1,241 +1,290 @@
-// app/events/[id]/tee-times/page.tsx
 import { createClient } from '@/utils/supabase/server'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Clock, Trash2, Plus } from 'lucide-react'
-import { createTeeTime, deleteTeeTime, assignToPairing, removeFromPairing } from './actions'
+import { Clock, Trash2, Plus, Lock, Unlock, Edit, Calendar, MapPin, User, ArrowLeft } from 'lucide-react'
+import CourseSetup from './CourseSetup'
+import SlotAssignment from './SlotAssignment'
+import { createTeeTime, deleteTeeTime, toggleRoundLock } from './actions'
 
-export default async function TeeTimesPage({ params, searchParams }: { params: { id: string }, searchParams: { date?: string } }) {
+// Helper to format dates nicely (e.g., "Fri, May 16")
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return 'TBD'
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  })
+}
+
+export default async function TeeTimesPage({ 
+  params, 
+  searchParams 
+}: { 
+  params: { id: string },
+  searchParams: { roundId?: string } 
+}) {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
   const { id } = await params
   
-  // 1. Fetch Event & Teams
-  const { data: teams } = await supabase.from('teams').select('*').eq('event_id', id).order('name')
-  
-  // 2. Handle Dates (Rounds)
-  const { data: rounds } = await supabase.from('rounds').select('*').eq('event_id', id).order('date')
-  
-  // Default to first round if not selected
-  const selectedDate = (await searchParams).date || rounds?.[0]?.date
-  const selectedRound = rounds?.find((r: any) => r.date === selectedDate)
+  const queryParams = await searchParams
+  const selectedRoundId = queryParams?.roundId
 
-  // 3. Fetch Data for Selected Round
-  let pairings: any[] = []
-  let roundParticipants: any[] = []
+  if (!user) redirect('/login')
 
-  if (selectedRound) {
-    // Get Pairings & Members
-    const { data: pData } = await supabase
-      .from('pairings')
-      .select(`
-        *,
-        pairing_members (
-            participant_id
+  // 1. Fetch Event with ALL Rounds
+  const { data: event } = await supabase
+    .from('events')
+    .select(`
+      *, 
+      rounds (
+        *, 
+        tee_times (
+          *, 
+          pairings (
+            *, 
+            profiles (*)
+          )
         )
-      `)
-      .eq('round_id', selectedRound.id)
-      .order('tee_time')
-    pairings = pData || []
+      )
+    `)
+    .eq('id', id)
+    .single()
 
-    // Get All Participants (to show unassigned pool)
-    const { data: allParts } = await supabase
-        .from('event_participants')
-        .select('id, team_id, profiles(full_name)')
-        .eq('event_id', id)
-    roundParticipants = allParts || []
-  }
+  if (!event) return <div>Event not found</div>
 
-  // 4. Helper: Find which players are already assigned to a pairing THIS ROUND
-  const assignedIds = new Set<string>()
-  pairings.forEach((p: any) => {
-      p.pairing_members.forEach((pm: any) => assignedIds.add(pm.participant_id))
+  const isOrganizer = event.created_by === user.id
+
+  // 2. Sort Rounds
+  const rounds = event.rounds?.sort((a: any, b: any) => a.date.localeCompare(b.date)) || []
+  
+  // 3. Determine Active Round
+  const activeRound = selectedRoundId 
+    ? rounds.find((r: any) => r.id === selectedRoundId) 
+    : rounds[0]
+
+  if (!activeRound) return <div className="p-8 text-center text-gray-500">No rounds setup for this event yet.</div>
+
+  // 4. Fetch Players (including full_name)
+  const { data: players } = await supabase
+    .from('event_players')
+    .select('profiles(id, email, handicap, full_name)')
+    .eq('event_id', id)
+
+  // 5. Logic for Active Round
+  const teeTimes = activeRound.tee_times || []
+  const sortedTimes = teeTimes.sort((a: any, b: any) => a.time.localeCompare(b.time))
+  const firstTeeTime = sortedTimes.length > 0 ? sortedTimes[0].time : null
+
+  // Calculate WHO IS PLAYING
+  const assignedPlayerIds = new Set()
+  teeTimes.forEach((tt: any) => {
+    tt.pairings.forEach((p: any) => {
+      if (p.player_id) assignedPlayerIds.add(p.player_id)
+    })
   })
 
-  // 5. Organize Teams (Assuming 2 Teams for now)
-  const team1 = teams?.[0]
-  const team2 = teams?.[1]
+  // Check Scoring Status
+  let isStarted = false
+  if (firstTeeTime) {
+      const roundDateStr = activeRound.date 
+      const firstTeeDateTime = new Date(`${roundDateStr}T${firstTeeTime}`)
+      const now = new Date()
+      firstTeeDateTime.setMinutes(firstTeeDateTime.getMinutes() - 30)
+      isStarted = now >= firstTeeDateTime
+  }
+
+  const isLockedByOrganizer = activeRound.scoring_locked
+  const isScoreEntryAllowed = isStarted && !isLockedByOrganizer
+  const canEnterScores = isScoreEntryAllowed || isOrganizer
 
   return (
-    <main className="min-h-screen bg-club-cream text-club-navy p-6 pb-20">
+    <div className="space-y-6">
       
-      {/* Header */}
-      <div className="max-w-5xl mx-auto mb-8 flex items-center gap-4">
-        <Link href={`/events/${id}/dashboard`} className="bg-white p-2 rounded-sm border border-club-navy/10 shadow-sm">
-          <ChevronLeft size={20} />
-        </Link>
-        <div>
-          <h1 className="font-serif text-2xl text-club-navy">Tee Sheet</h1>
-          <p className="text-xs text-club-text/60">Manage pairings and times</p>
+      {/* HEADER WITH TABS */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        
+        {/* Back to Dashboard Link */}
+        <div className="bg-gray-50/50 px-6 py-3 border-b border-gray-100 flex items-center">
+            <Link 
+                href={`/events/${id}/dashboard`} 
+                className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-club-gold transition-colors"
+            >
+                <ArrowLeft size={12} /> Back to Dashboard
+            </Link>
+        </div>
+
+        {/* Main Title Area */}
+        <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="font-serif text-3xl text-club-navy font-bold">{event.name}</h1>
+            <div className="flex items-center gap-2 mt-1 text-gray-400 text-sm">
+               <Calendar size={14} /> 
+               <span>{rounds.length} Rounds Scheduled</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Round Tabs */}
+        <div className="flex overflow-x-auto bg-gray-50/50 border-b border-gray-100">
+          {rounds.map((round: any) => {
+            const isActive = round.id === activeRound.id
+            return (
+              <Link 
+                key={round.id} 
+                href={`/events/${id}/tee-times?roundId=${round.id}`}
+                className={`
+                  flex-shrink-0 px-6 py-4 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors hover:bg-gray-50
+                  ${isActive 
+                    ? 'border-club-gold text-club-navy bg-white' 
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }
+                `}
+              >
+                {formatDate(round.date)}
+              </Link>
+            )
+          })}
+        </div>
+
+        {/* Active Round Details Bar */}
+        <div className="px-6 py-4 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2 text-club-navy font-bold">
+                <MapPin size={16} className="text-club-gold" />
+                {activeRound.course_name || 'Course Not Set'}
+            </div>
+
+            <div className="flex gap-3 items-center">
+                {isOrganizer && (
+                    <>
+                        <CourseSetup 
+                            eventId={id} 
+                            roundId={activeRound.id} 
+                            initialData={activeRound.course_data} 
+                            initialName={activeRound.course_name} 
+                        />
+                        
+                        <form action={async () => {
+                            'use server'
+                            await toggleRoundLock(activeRound.id, !isLockedByOrganizer)
+                        }}>
+                            <input type="hidden" name="roundId" value={activeRound.id} />
+                            <button className={`
+                                flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all
+                                ${isLockedByOrganizer ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}
+                            `}>
+                                {isLockedByOrganizer ? <Lock size={14} /> : <Unlock size={14} />}
+                                {isLockedByOrganizer ? 'Locked' : 'Open'}
+                            </button>
+                        </form>
+                    </>
+                )}
+            </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto space-y-6">
-        
-        {/* DATE SELECTOR TABS */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
-            {rounds?.map((r: any) => {
-                const isActive = r.date === selectedDate
-                return (
-                    <Link 
-                        key={r.id} 
-                        href={`/events/${id}/tee-times?date=${r.date}`}
-                        className={`px-4 py-2 rounded-sm text-sm font-bold uppercase tracking-wider whitespace-nowrap border transition-all ${
-                            isActive 
-                            ? 'bg-club-navy text-white border-club-navy' 
-                            : 'bg-white text-club-text border-club-gold/20 hover:border-club-gold'
-                        }`}
-                    >
-                        {new Date(r.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric'})}
-                    </Link>
-                )
-            })}
-             {!rounds?.length && (
-                <div className="text-sm text-red-500 bg-red-50 p-2 rounded">
-                    No rounds found. Please go to "Game Modes" to initialize dates first.
-                </div>
-            )}
+      {/* ACTION BAR */}
+      <div className="bg-club-navy p-6 rounded-xl text-white flex flex-col md:flex-row justify-between items-center gap-4 shadow-lg">
+        <div>
+            <h2 className="font-serif text-xl font-bold text-club-gold">
+                Ready to play on {formatDate(activeRound.date)}?
+            </h2>
+            <p className="text-white/60 text-sm">
+                {!isStarted 
+                    ? `Scoring opens 30 mins before first tee time (${firstTeeTime || 'TBD'})` 
+                    : 'Enter your scores hole-by-hole.'}
+            </p>
         </div>
-
-        {selectedRound && (
-            <>
-                {/* 1. ADD TEE TIME FORM */}
-                <div className="bg-club-paper p-4 rounded-sm border border-club-gold/20 flex justify-between items-center shadow-sm">
-                    <h3 className="font-serif text-lg">Add Tee Time</h3>
-                    <form action={async (formData) => {
-                        'use server'
-                        await createTeeTime(id, selectedRound.id, formData.get('time') as string)
-                    }} className="flex gap-2">
-                        <input 
-                            type="time" 
-                            name="time" 
-                            required
-                            className="bg-white border border-club-gold/40 p-2 rounded-sm text-club-navy text-sm"
-                        />
-                        <button className="bg-club-navy text-white p-2 rounded-sm hover:bg-opacity-90">
-                            <Plus size={20} />
-                        </button>
-                    </form>
-                </div>
-
-                {/* 2. PAIRINGS LIST */}
-                <div className="space-y-4">
-                    {pairings.map((pairing: any) => {
-                        // Filter members in this pairing
-                        const members = pairing.pairing_members.map((pm: any) => pm.participant_id)
-                        
-                        // Count how many from each team are currently in this group
-                        const team1Count = roundParticipants.filter(p => members.includes(p.id) && p.team_id === team1?.id).length
-                        const team2Count = roundParticipants.filter(p => members.includes(p.id) && p.team_id === team2?.id).length
-
-                        return (
-                            <div key={pairing.id} className="bg-white border-l-4 border-club-gold rounded-sm shadow-md overflow-hidden">
-                                
-                                {/* Time Header */}
-                                <div className="bg-gray-50 p-3 border-b border-gray-100 flex justify-between items-center">
-                                    <div className="flex items-center gap-2 text-club-navy">
-                                        <Clock size={16} />
-                                        <span className="font-bold font-serif text-lg">
-                                            {new Date(`1970-01-01T${pairing.tee_time}`).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'})}
-                                        </span>
-                                    </div>
-                                    <form action={async () => {
-                                        'use server'
-                                        await deleteTeeTime(id, pairing.id)
-                                    }}>
-                                        <button className="text-gray-300 hover:text-red-500 transition">
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </form>
-                                </div>
-
-                                {/* Matchup Grid */}
-                                <div className="grid grid-cols-2 divide-x divide-gray-100">
-                                    
-                                    {/* TEAM 1 SLOTS */}
-                                    <div className="p-3">
-                                        <p className="text-[10px] uppercase font-bold text-club-text/40 mb-2">{team1?.name || 'Team 1'}</p>
-                                        <div className="space-y-2">
-                                            {/* Render Existing Players */}
-                                            {roundParticipants.filter(p => members.includes(p.id) && p.team_id === team1?.id).map((p: any) => (
-                                                <div key={p.id} className="flex justify-between items-center text-sm bg-club-navy/5 p-2 rounded border border-club-navy/10">
-                                                    <span>{p.profiles.full_name}</span>
-                                                    <form action={async () => {
-                                                        'use server'
-                                                        await removeFromPairing(id, pairing.id, p.id)
-                                                    }}>
-                                                        <button className="text-red-300 hover:text-red-500">&times;</button>
-                                                    </form>
-                                                </div>
-                                            ))}
-                                            {/* Render Empty Slots (Max 2) */}
-                                            {[...Array(Math.max(0, 2 - team1Count))].map((_, i) => (
-                                                 <form key={i} action={async (formData) => {
-                                                    'use server'
-                                                    await assignToPairing(id, pairing.id, formData.get('playerId') as string)
-                                                 }} className="flex gap-1">
-                                                    <select name="playerId" className="w-full text-xs p-2 bg-white border border-dashed border-gray-300 rounded text-gray-500">
-                                                        <option value="">+ Add {team1?.name} Player</option>
-                                                        {roundParticipants
-                                                            .filter(p => p.team_id === team1?.id && !assignedIds.has(p.id))
-                                                            .map((p: any) => (
-                                                                <option key={p.id} value={p.id}>{p.profiles.full_name}</option>
-                                                            ))
-                                                        }
-                                                    </select>
-                                                    <button className="text-club-navy hover:text-club-gold">
-                                                        <Plus size={16} />
-                                                    </button>
-                                                 </form>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* TEAM 2 SLOTS */}
-                                    <div className="p-3">
-                                        <p className="text-[10px] uppercase font-bold text-club-text/40 mb-2">{team2?.name || 'Team 2'}</p>
-                                        <div className="space-y-2">
-                                             {/* Render Existing Players */}
-                                             {roundParticipants.filter(p => members.includes(p.id) && p.team_id === team2?.id).map((p: any) => (
-                                                <div key={p.id} className="flex justify-between items-center text-sm bg-club-navy/5 p-2 rounded border border-club-navy/10">
-                                                    <span>{p.profiles.full_name}</span>
-                                                    <form action={async () => {
-                                                        'use server'
-                                                        await removeFromPairing(id, pairing.id, p.id)
-                                                    }}>
-                                                        <button className="text-red-300 hover:text-red-500">&times;</button>
-                                                    </form>
-                                                </div>
-                                            ))}
-                                            {/* Render Empty Slots (Max 2) */}
-                                            {[...Array(Math.max(0, 2 - team2Count))].map((_, i) => (
-                                                 <form key={i} action={async (formData) => {
-                                                    'use server'
-                                                    await assignToPairing(id, pairing.id, formData.get('playerId') as string)
-                                                 }} className="flex gap-1">
-                                                    <select name="playerId" className="w-full text-xs p-2 bg-white border border-dashed border-gray-300 rounded text-gray-500">
-                                                        <option value="">+ Add {team2?.name} Player</option>
-                                                        {roundParticipants
-                                                            .filter(p => p.team_id === team2?.id && !assignedIds.has(p.id))
-                                                            .map((p: any) => (
-                                                                <option key={p.id} value={p.id}>{p.profiles.full_name}</option>
-                                                            ))
-                                                        }
-                                                    </select>
-                                                    <button className="text-club-navy hover:text-club-gold">
-                                                        <Plus size={16} />
-                                                    </button>
-                                                 </form>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </div>
-                        )
-                    })}
-                </div>
-            </>
+        
+        {canEnterScores ? (
+             <Link 
+                href={`/events/${id}/scorecard?roundId=${activeRound.id}`}
+                className="bg-club-gold text-club-navy px-8 py-3 rounded-lg font-bold uppercase tracking-widest hover:bg-white hover:text-club-navy transition shadow-md flex items-center gap-2"
+             >
+                <Edit size={18} /> Enter Scores
+             </Link>
+        ) : (
+            <button disabled className="bg-white/10 text-white/40 px-8 py-3 rounded-lg font-bold uppercase tracking-widest cursor-not-allowed flex items-center gap-2">
+                {isLockedByOrganizer ? <Lock size={18} /> : <Clock size={18} />}
+                {isLockedByOrganizer ? 'Scoring Locked' : 'Wait for Tee Off'}
+            </button>
         )}
       </div>
-    </main>
+
+      {/* TEE SHEET GRID */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {sortedTimes.map((tt: any) => (
+          <div key={tt.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+            
+            {/* TIME HEADER */}
+            <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center">
+              <div className="flex items-center gap-2 text-club-navy font-bold font-serif text-xl">
+                <Clock size={18} className="text-club-gold" />
+                {tt.time}
+              </div>
+              {isOrganizer && (
+                <form action={deleteTeeTime}>
+                    <input type="hidden" name="teeTimeId" value={tt.id} />
+                    <button className="text-gray-300 hover:text-red-500 transition-colors p-1"><Trash2 size={16} /></button>
+                </form>
+              )}
+            </div>
+
+            {/* PLAYER LIST */}
+            <div className="p-4 flex-1 space-y-2">
+              {[0, 1, 2, 3].map((slotIndex) => {
+                const pairing = tt.pairings.find((p: any) => p.slot_number === slotIndex + 1)
+                const player = pairing?.profiles
+
+                return (
+                  <div key={slotIndex} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-transparent hover:border-club-gold/30 transition-colors group relative">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${player ? 'bg-club-navy text-white' : 'bg-gray-200 text-gray-400'}`}>
+                        {player 
+                            ? (player.full_name ? player.full_name[0].toUpperCase() : player.email[0].toUpperCase()) 
+                            : <User size={14} />
+                        }
+                      </div>
+                      <div className="flex flex-col">
+                        <span className={`text-sm font-bold ${player ? 'text-gray-900' : 'text-gray-400'}`}>
+                          {player 
+                            ? (player.full_name || player.email.split('@')[0]) 
+                            : 'Open Slot'
+                          }
+                        </span>
+                        {player && <span className="text-[10px] text-club-gold font-bold uppercase tracking-wider">HCP {player.handicap}</span>}
+                      </div>
+                    </div>
+
+                    {isOrganizer && (
+                      <SlotAssignment
+                        teeTimeId={tt.id}
+                        slotIndex={slotIndex}
+                        player={player}
+                        players={players || []}
+                        takenIds={Array.from(assignedPlayerIds) as string[]}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+
+        {/* ADD TIME CARD */}
+        {isOrganizer && (
+            <div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center p-8 text-gray-400 hover:border-club-gold hover:text-club-gold transition cursor-pointer group">
+                <form action={createTeeTime} className="flex flex-col items-center w-full">
+                    <input type="hidden" name="roundId" value={activeRound.id} />
+                    <input type="time" name="time" required className="bg-transparent text-2xl font-bold text-center mb-2 outline-none text-club-navy placeholder-gray-300 group-hover:placeholder-club-gold/50" />
+                    <button className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+                        <Plus size={16} /> Add Tee Time
+                    </button>
+                </form>
+            </div>
+        )}
+      </div>
+    </div>
   )
 }

@@ -1,72 +1,84 @@
-// app/events/[id]/tee-times/actions.ts
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-// 1. CREATE A NEW TEE TIME
-export async function createTeeTime(eventId: string, roundId: string, time: string) {
+export async function createTeeTime(formData: FormData) {
   const supabase = await createClient()
+  const roundId = formData.get('roundId') as string
+  const time = formData.get('time') as string
 
-  const { error } = await supabase
-    .from('pairings')
-    .insert({ round_id: roundId, tee_time: time })
+  if (!roundId || !time) return
 
-  if (error) throw new Error('Failed to create tee time')
+  const { data: teeTime, error } = await supabase
+    .from('tee_times')
+    .insert({ round_id: roundId, time })
+    .select()
+    .single()
 
-  revalidatePath(`/events/${eventId}/tee-times`)
-}
-
-// 2. DELETE TEE TIME
-export async function deleteTeeTime(eventId: string, pairingId: string) {
-  const supabase = await createClient()
-
-  await supabase.from('pairings').delete().eq('id', pairingId)
-  
-  revalidatePath(`/events/${eventId}/tee-times`)
-}
-
-// 3. ASSIGN PLAYER TO PAIRING
-export async function assignToPairing(eventId: string, pairingId: string, participantId: string) {
-  const supabase = await createClient()
-
-  // A. Get the Round ID for this pairing so we can check other times on the same day
-  const { data: pairing } = await supabase.from('pairings').select('round_id').eq('id', pairingId).single()
-  
-  if (pairing) {
-    // B. Find all other pairings for this specific round
-    const { data: roundPairings } = await supabase.from('pairings').select('id').eq('round_id', pairing.round_id)
-    const roundPairingIds = roundPairings?.map(p => p.id) || []
-
-    // C. Remove this player from ANY pairing on this day (prevent duplicates)
-    if (roundPairingIds.length > 0) {
-      await supabase
-        .from('pairing_members')
-        .delete()
-        .in('pairing_id', roundPairingIds)
-        .eq('participant_id', participantId)
-    }
+  if (error) {
+    console.error('Error creating tee time:', error)
+    return
   }
 
-  // D. Add to the new pairing
-  const { error } = await supabase
-    .from('pairing_members')
-    .insert({ pairing_id: pairingId, participant_id: participantId })
+  // Create 4 Empty Pairing Slots for this time
+  const slots = Array(4).fill(null).map((_, i) => ({
+    tee_time_id: teeTime.id,
+    player_id: null,
+    slot_number: i + 1
+  }))
 
-  if (error) console.error(error)
-
-  revalidatePath(`/events/${eventId}/tee-times`)
+  await supabase.from('pairings').insert(slots)
+  revalidatePath('/events')
 }
 
-// 4. REMOVE PLAYER FROM PAIRING
-export async function removeFromPairing(eventId: string, pairingId: string, participantId: string) {
+export async function deleteTeeTime(formData: FormData) {
   const supabase = await createClient()
+  const teeTimeId = formData.get('teeTimeId') as string
+  
+  if (!teeTimeId) return
 
-  await supabase
-    .from('pairing_members')
-    .delete()
-    .eq('pairing_id', pairingId)
-    .eq('participant_id', participantId)
+  await supabase.from('tee_times').delete().eq('id', teeTimeId)
+  revalidatePath('/events')
+}
 
-  revalidatePath(`/events/${eventId}/tee-times`)
+export async function assignToPairing(formData: FormData) {
+  const supabase = await createClient()
+  
+  const teeTimeId = formData.get('teeTimeId') as string
+  const slotIndex = formData.get('slotIndex')
+  const playerId = formData.get('playerId') as string
+
+  if (!teeTimeId || slotIndex === null) return
+
+  const slotNumber = parseInt(slotIndex as string) + 1
+  const finalPlayerId = playerId === 'remove' ? null : playerId
+
+  // --- NEW LOGIC: UPSERT (No "Slot Missing" check needed) ---
+  const { error } = await supabase
+    .from('pairings')
+    .upsert(
+      { 
+        tee_time_id: teeTimeId, 
+        slot_number: slotNumber, 
+        player_id: finalPlayerId 
+      },
+      { onConflict: 'tee_time_id, slot_number' }
+    )
+
+  if (error) {
+    console.error("Assign Error:", error)
+  }
+
+  revalidatePath('/events')
+}
+
+export async function toggleRoundLock(roundId: string, isLocked: boolean) {
+    const supabase = await createClient()
+    await supabase
+      .from('rounds')
+      .update({ scoring_locked: isLocked })
+      .eq('id', roundId)
+    
+    revalidatePath('/events')
 }
