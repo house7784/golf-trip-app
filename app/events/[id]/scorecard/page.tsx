@@ -4,9 +4,20 @@ import Link from 'next/link'
 import { ChevronLeft, Save } from 'lucide-react'
 import { submitScore } from './actions'
 
-export default async function ScorecardPage({ params }: { params: Promise<{ id: string }> }) {
+function samePair(slotA: number, slotB: number) {
+  return (slotA <= 2 && slotB <= 2) || (slotA >= 3 && slotB >= 3)
+}
+
+export default async function ScorecardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<{ roundId?: string; playerId?: string; scope?: string }>
+}) {
   const supabase = await createClient()
   const { id } = await params
+  const query = await searchParams
   const { data: { user } } = await supabase.auth.getUser()
 
   // 1. Get Today's Round (We'll assume the most recent or active one for simplicity)
@@ -18,7 +29,9 @@ export default async function ScorecardPage({ params }: { params: Promise<{ id: 
     .not('course_data', 'is', null)
     .order('date')
 
-  const activeRound = rounds?.[0]
+  const activeRound = query?.roundId
+    ? rounds?.find((round: any) => round.id === query.roundId) || rounds?.[0]
+    : rounds?.[0]
 
   if (!activeRound) {
     return (
@@ -31,13 +44,99 @@ export default async function ScorecardPage({ params }: { params: Promise<{ id: 
   }
 
   const course = activeRound.course_data
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('created_by')
+    .eq('id', id)
+    .single()
+
+  const { data: participant } = await supabase
+    .from('event_participants')
+    .select('role')
+    .eq('event_id', id)
+    .eq('user_id', user?.id)
+    .single()
+
+  const isOrganizer = participant?.role === 'organizer' || event?.created_by === user?.id
+
+  const { data: captainTeam } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('event_id', id)
+    .eq('captain_id', user?.id)
+    .maybeSingle()
+
+  const isCaptain = Boolean(captainTeam?.id)
+
+  const { data: roundData } = await supabase
+    .from('rounds')
+    .select('scoring_locked')
+    .eq('id', activeRound.id)
+    .single()
+
+  const scoringLocked = Boolean(roundData?.scoring_locked)
+
+  const { data: participants } = await supabase
+    .from('event_participants')
+    .select('user_id, team_id, profiles:user_id(full_name, email)')
+    .eq('event_id', id)
+
+  const participantById = new Map<string, any>()
+  ;(participants || []).forEach((entry: any) => participantById.set(entry.user_id, entry))
+
+  const { data: pairings } = await supabase
+    .from('pairings')
+    .select('tee_time_id, slot_number, player_id, tee_times!inner(round_id)')
+    .eq('tee_times.round_id', activeRound.id)
+
+  const actorPair = (pairings || []).find((entry: any) => entry.player_id === user?.id)
+
+  const editableUserIds = new Set<string>()
+  if (user?.id) editableUserIds.add(user.id)
+
+  if (actorPair) {
+    ;(pairings || []).forEach((entry: any) => {
+      if (!entry.player_id) return
+      if (entry.tee_time_id === actorPair.tee_time_id && samePair(entry.slot_number, actorPair.slot_number)) {
+        editableUserIds.add(entry.player_id)
+      }
+    })
+  }
+
+  if (isCaptain && captainTeam?.id) {
+    ;(participants || []).forEach((entry: any) => {
+      if (entry.team_id === captainTeam.id) editableUserIds.add(entry.user_id)
+    })
+  }
+
+  if (isOrganizer) {
+    ;(participants || []).forEach((entry: any) => editableUserIds.add(entry.user_id))
+  }
+
+  const editablePlayers = Array.from(editableUserIds)
+    .map((playerId) => ({
+      id: playerId,
+      name:
+        participantById.get(playerId)?.profiles?.full_name ||
+        participantById.get(playerId)?.profiles?.email?.split('@')[0] ||
+        'Golfer',
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const selectedPlayerId =
+    query?.playerId && editableUserIds.has(query.playerId)
+      ? query.playerId
+      : user?.id || ''
+
+  const canEditSelected = isOrganizer || !scoringLocked
   
   // 2. Get Existing Scores for this user
   const { data: existingScore } = await supabase
     .from('scores')
     .select('hole_scores')
     .eq('round_id', activeRound.id)
-    .eq('user_id', user?.id)
+    .eq('user_id', selectedPlayerId)
     .single()
 
   const scores = existingScore?.hole_scores || {}
@@ -55,6 +154,33 @@ export default async function ScorecardPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
+      {editablePlayers.length > 1 && (
+        <div className="max-w-md mx-auto mb-4">
+          <form method="get" className="bg-white rounded-lg border border-gray-200 p-3">
+            <input type="hidden" name="roundId" value={activeRound.id} />
+            <label className="block text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">
+              Scoring For
+            </label>
+            <select
+              name="playerId"
+              defaultValue={selectedPlayerId}
+              onChange={(e) => e.currentTarget.form?.requestSubmit()}
+              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            >
+              {editablePlayers.map((entry) => (
+                <option key={entry.id} value={entry.id}>{entry.name}</option>
+              ))}
+            </select>
+          </form>
+        </div>
+      )}
+
+      {scoringLocked && !isOrganizer && (
+        <div className="max-w-md mx-auto mb-4 bg-white border border-red-200 p-3 rounded-sm text-sm text-red-700">
+          Scores are locked by the organizer for this round.
+        </div>
+      )}
+
       {/* SCORECARD FORM */}
       <div className="max-w-md mx-auto">
         <form action={async (formData) => {
@@ -65,8 +191,9 @@ export default async function ScorecardPage({ params }: { params: Promise<{ id: 
                 const val = formData.get(`hole_${i}`)
                 if (val) newScores[i] = parseInt(val as string)
             }
-            await submitScore(id, activeRound.id, user!.id, newScores)
+            await submitScore(id, activeRound.id, formData.get('playerId') as string, newScores)
         }}>
+            <input type="hidden" name="playerId" value={selectedPlayerId} />
             
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 {course.holes.map((hole: any) => {
@@ -96,6 +223,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ id: 
                                     pattern="[0-9]*"
                                     defaultValue={currentVal}
                                     placeholder="-"
+                                    disabled={!canEditSelected}
                                     className={`w-full text-center text-2xl outline-none bg-transparent ${scoreColor}`}
                                 />
                             </div>
@@ -111,7 +239,7 @@ export default async function ScorecardPage({ params }: { params: Promise<{ id: 
 
             {/* Floating Save Button */}
             <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto">
-                <button className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors">
+              <button disabled={!canEditSelected} className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     <Save size={18} />
                     Save Card
                 </button>

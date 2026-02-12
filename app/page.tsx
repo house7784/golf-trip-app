@@ -82,11 +82,16 @@ export default async function Home({
       <nav className="bg-club-navy text-white p-4 sticky top-0 z-50 shadow-md">
         <div className="flex justify-between items-center max-w-md mx-auto">
           <h1 className="font-serif text-lg tracking-wide text-club-gold">The Invitational</h1>
-          <form action={signOut}>
-            <button className="text-white/60 hover:text-white transition-colors">
-              <LogOut size={20} />
-            </button>
-          </form>
+          <div className="flex items-center gap-3">
+            <Link href="/profile" className="text-white/70 hover:text-white transition-colors" title="Profile">
+              <User size={20} />
+            </Link>
+            <form action={signOut}>
+              <button className="text-white/60 hover:text-white transition-colors" title="Sign Out">
+                <LogOut size={20} />
+              </button>
+            </form>
+          </div>
         </div>
       </nav>
 

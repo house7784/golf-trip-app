@@ -177,10 +177,11 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
     const { data: teamsData } = await supabase
         .from('teams')
-        .select('id, name')
+        .select('id, name, captain_id')
         .eq('event_id', id)
 
     const teams: TeamRow[] = (teamsData as TeamRow[] | null) || []
+    const isCaptain = teams.some((team: any) => team.captain_id === user?.id)
 
     let scores: ScoreRow[] = []
     if (sortedRounds.length > 0) {
@@ -522,6 +523,13 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                 <Edit size={32} />
                 <span className="font-bold text-sm">Enter Scores</span>
             </Link>
+
+                        {(isCaptain || isOrganizer) && (
+                            <Link href={`/events/${id}/scorecard?scope=team`} className="bg-club-gold text-club-navy p-4 rounded-xl shadow-md flex flex-col items-center justify-center gap-2 h-32 active:bg-opacity-90 transition">
+                                <Edit size={28} />
+                                <span className="font-bold text-xs uppercase tracking-wider">Manage Team Scores</span>
+                            </Link>
+                        )}
 
             {/* Tee Times */}
             <Link href={`/events/${id}/tee-times`} className="bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition">
