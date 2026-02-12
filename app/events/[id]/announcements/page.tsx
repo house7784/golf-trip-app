@@ -6,6 +6,10 @@ import { postAnnouncement, deleteAnnouncement } from '../dashboard/actions'
 
 const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
 
+function isSystemAnnouncement(row: any) {
+  return row?.message === LEADERBOARD_ACTIVATION_MESSAGE || row?.content === LEADERBOARD_ACTIVATION_MESSAGE || row?.title === LEADERBOARD_ACTIVATION_MESSAGE
+}
+
 export default async function AnnouncementsPage({
   params,
 }: {
@@ -30,8 +34,9 @@ export default async function AnnouncementsPage({
     .from('announcements')
     .select('*')
     .eq('event_id', id)
-    .neq('message', LEADERBOARD_ACTIVATION_MESSAGE)
     .order('created_at', { ascending: false })
+
+  const visibleAnnouncements = (announcements || []).filter((note: any) => !isSystemAnnouncement(note))
 
   return (
     <main className="min-h-screen bg-club-cream text-club-navy p-6 pb-20">
@@ -56,15 +61,15 @@ export default async function AnnouncementsPage({
               required
               className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-club-gold"
             />
-            <button className="bg-club-navy text-white px-4 py-2 rounded-lg hover:bg-club-gold hover:text-club-navy transition-colors">
+            <button className="bg-club-gold text-club-navy border border-club-navy/20 px-4 py-2 rounded-lg hover:bg-club-navy hover:text-white transition-colors">
               <Send size={16} />
             </button>
           </form>
         )}
 
-        {announcements && announcements.length > 0 ? (
+        {visibleAnnouncements.length > 0 ? (
           <div className="space-y-3">
-            {announcements.map((note: any) => (
+            {visibleAnnouncements.map((note: any) => (
               <div key={note.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
                 <div className="flex items-start gap-3">
                   <Megaphone className="text-club-gold shrink-0 mt-1" size={16} />

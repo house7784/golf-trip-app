@@ -5,6 +5,10 @@ import { revalidatePath } from 'next/cache'
 
 const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
 
+function isSystemAnnouncement(row: any) {
+  return row?.message === LEADERBOARD_ACTIVATION_MESSAGE || row?.content === LEADERBOARD_ACTIVATION_MESSAGE || row?.title === LEADERBOARD_ACTIVATION_MESSAGE
+}
+
 export async function postAnnouncement(formData: FormData) {
   const supabase = await createClient()
   
@@ -23,9 +27,30 @@ export async function postAnnouncement(formData: FormData) {
     .eq('user_id', user.id)
     .single()
 
-  if (participant?.role !== 'organizer') return
+  const { data: event } = await supabase
+    .from('events')
+    .select('created_by')
+    .eq('id', eventId)
+    .single()
 
-  await supabase.from('announcements').insert({ event_id: eventId, message })
+  const isOrganizer = participant?.role === 'organizer' || event?.created_by === user.id
+  if (!isOrganizer) return
+
+  const { error: messageInsertError } = await supabase
+    .from('announcements')
+    .insert({ event_id: eventId, message })
+
+  if (messageInsertError) {
+    const { error: contentInsertError } = await supabase
+      .from('announcements')
+      .insert({ event_id: eventId, title: 'Announcement', content: message })
+
+    if (contentInsertError) {
+      console.error('Announcement post failed:', { messageInsertError, contentInsertError })
+      return
+    }
+  }
+
   revalidatePath(`/events/${eventId}/dashboard`)
   revalidatePath(`/events/${eventId}/announcements`)
 }
@@ -47,7 +72,14 @@ export async function deleteAnnouncement(formData: FormData) {
     .eq('user_id', user.id)
     .single()
 
-  if (participant?.role !== 'organizer') return
+  const { data: event } = await supabase
+    .from('events')
+    .select('created_by')
+    .eq('id', eventId)
+    .single()
+
+  const isOrganizer = participant?.role === 'organizer' || event?.created_by === user.id
+  if (!isOrganizer) return
 
   await supabase.from('announcements').delete().eq('id', id)
   revalidatePath(`/events/${eventId}/dashboard`)
@@ -70,19 +102,38 @@ export async function activateLeaderboard(formData: FormData) {
     .eq('user_id', user.id)
     .single()
 
-  if (participant?.role !== 'organizer') return
+  const { data: event } = await supabase
+    .from('events')
+    .select('created_by')
+    .eq('id', eventId)
+    .single()
 
-  const { data: existing } = await supabase
+  const isOrganizer = participant?.role === 'organizer' || event?.created_by === user.id
+  if (!isOrganizer) return
+
+  const { data: announcementRows } = await supabase
     .from('announcements')
-    .select('id')
+    .select('*')
     .eq('event_id', eventId)
-    .eq('message', LEADERBOARD_ACTIVATION_MESSAGE)
-    .maybeSingle()
+    .order('created_at', { ascending: false })
+
+  const existing = (announcementRows || []).find(isSystemAnnouncement)
 
   if (!existing) {
-    await supabase
+    const { error: messageInsertError } = await supabase
       .from('announcements')
       .insert({ event_id: eventId, message: LEADERBOARD_ACTIVATION_MESSAGE })
+
+    if (messageInsertError) {
+      const { error: contentInsertError } = await supabase
+        .from('announcements')
+        .insert({ event_id: eventId, title: LEADERBOARD_ACTIVATION_MESSAGE, content: LEADERBOARD_ACTIVATION_MESSAGE })
+
+      if (contentInsertError) {
+        console.error('Activate leaderboard failed:', { messageInsertError, contentInsertError })
+        return
+      }
+    }
   }
 
   revalidatePath(`/events/${eventId}/dashboard`)
@@ -105,13 +156,30 @@ export async function deactivateLeaderboard(formData: FormData) {
     .eq('user_id', user.id)
     .single()
 
-  if (participant?.role !== 'organizer') return
+  const { data: event } = await supabase
+    .from('events')
+    .select('created_by')
+    .eq('id', eventId)
+    .single()
 
-  await supabase
+  const isOrganizer = participant?.role === 'organizer' || event?.created_by === user.id
+  if (!isOrganizer) return
+
+  const { data: rows } = await supabase
     .from('announcements')
-    .delete()
+    .select('id, message, content, title')
     .eq('event_id', eventId)
-    .eq('message', LEADERBOARD_ACTIVATION_MESSAGE)
+
+  const idsToDelete = (rows || [])
+    .filter(isSystemAnnouncement)
+    .map((row: any) => row.id)
+
+  if (idsToDelete.length > 0) {
+    await supabase
+      .from('announcements')
+      .delete()
+      .in('id', idsToDelete)
+  }
 
   revalidatePath(`/events/${eventId}/dashboard`)
   revalidatePath(`/events/${eventId}/announcements`)

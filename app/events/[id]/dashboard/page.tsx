@@ -65,6 +65,10 @@ function totalScore(holeScores: Record<string, number> | null | undefined) {
     return Object.values(holeScores).reduce((sum, value) => sum + (Number(value) || 0), 0)
 }
 
+function isSystemAnnouncement(row: any) {
+    return row?.message === LEADERBOARD_ACTIVATION_MESSAGE || row?.content === LEADERBOARD_ACTIVATION_MESSAGE || row?.title === LEADERBOARD_ACTIVATION_MESSAGE
+}
+
 export default async function EventDashboard({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params
@@ -84,22 +88,15 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
   const isOrganizer = participant?.role === 'organizer'
 
   // 3. Fetch Announcements
-  const { data: announcements } = await supabase
+    const { data: announcementRows } = await supabase
     .from('announcements')
     .select('*')
     .eq('event_id', id)
-        .neq('message', LEADERBOARD_ACTIVATION_MESSAGE)
     .order('created_at', { ascending: false })
-    .limit(3)
 
-    const { data: activationMarker } = await supabase
-        .from('announcements')
-        .select('id')
-        .eq('event_id', id)
-        .eq('message', LEADERBOARD_ACTIVATION_MESSAGE)
-        .maybeSingle()
-
-    const leaderboardActive = Boolean(activationMarker)
+    const allAnnouncements = announcementRows || []
+    const leaderboardActive = allAnnouncements.some(isSystemAnnouncement)
+    const announcements = allAnnouncements.filter((item: any) => !isSystemAnnouncement(item)).slice(0, 3)
 
     const { data: roundsData } = await supabase
         .from('rounds')
@@ -439,7 +436,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                   required
                   className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-club-gold"
                 />
-                <button className="bg-club-navy text-white px-4 py-2 rounded-lg hover:bg-club-gold hover:text-club-navy transition-colors">
+                                <button className="bg-club-gold text-club-navy border border-club-navy/20 px-4 py-2 rounded-lg hover:bg-club-navy hover:text-white transition-colors">
                   <Send size={16} />
                 </button>
               </form>
