@@ -11,13 +11,79 @@ interface SlotAssignmentProps {
   player: any
   players: any[]
   takenIds: string[]
+  pairings: any[]
+  enforceTeamPairing: boolean
+  teamNameById: Record<string, string>
 }
 
-export default function SlotAssignment({ teeTimeId, slotIndex, player, players, takenIds }: SlotAssignmentProps) {
+function getSideSlots(slotNumber: number) {
+  return slotNumber <= 2 ? [1, 2] : [3, 4]
+}
+
+function getOppositeSideSlots(slotNumber: number) {
+  return slotNumber <= 2 ? [3, 4] : [1, 2]
+}
+
+export default function SlotAssignment({ teeTimeId, slotIndex, player, players, takenIds, pairings, enforceTeamPairing, teamNameById }: SlotAssignmentProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const availablePlayers = players.filter(p => !takenIds.includes(p.profiles.id))
+  const slotNumber = slotIndex + 1
+  const sideSlots = getSideSlots(slotNumber)
+  const oppositeSlots = getOppositeSideSlots(slotNumber)
+
+  const pairingBySlot = new Map<number, any>()
+  pairings.forEach((pairing) => {
+    pairingBySlot.set(pairing.slot_number, pairing)
+  })
+
+  const sidePlayers = sideSlots
+    .filter((slot) => slot !== slotNumber)
+    .map((slot) => pairingBySlot.get(slot)?.player_id)
+    .filter(Boolean) as string[]
+
+  const oppositePlayers = oppositeSlots
+    .map((slot) => pairingBySlot.get(slot)?.player_id)
+    .filter(Boolean) as string[]
+
+  const playerMap = new Map<string, any>()
+  players.forEach((entry) => {
+    if (entry?.profiles?.id) {
+      playerMap.set(entry.profiles.id, entry)
+    }
+  })
+
+  const sideTeams = Array.from(
+    new Set(
+      sidePlayers
+        .map((id) => playerMap.get(id)?.team_id)
+        .filter(Boolean)
+    )
+  ) as string[]
+
+  const oppositeTeams = Array.from(
+    new Set(
+      oppositePlayers
+        .map((id) => playerMap.get(id)?.team_id)
+        .filter(Boolean)
+    )
+  ) as string[]
+
+  const availablePlayers = players.filter((entry) => {
+    const candidateId = entry?.profiles?.id
+    if (!candidateId) return false
+    if (takenIds.includes(candidateId)) return false
+
+    if (!enforceTeamPairing) return true
+
+    const candidateTeamId = entry?.team_id
+    if (!candidateTeamId) return false
+
+    if (sideTeams.length > 0 && !sideTeams.includes(candidateTeamId)) return false
+    if (sideTeams.length === 0 && oppositeTeams.length === 1 && oppositeTeams[0] === candidateTeamId) return false
+
+    return true
+  })
 
   const handleAssignment = async (formData: FormData) => {
     await assignToPairing(formData)
@@ -55,8 +121,7 @@ export default function SlotAssignment({ teeTimeId, slotIndex, player, players, 
               {availablePlayers.length > 0 ? (
                   availablePlayers.map((p: any) => (
                   <option key={p.profiles.id} value={p.profiles.id}>
-                      {/* SHOW NAME HERE */}
-                      {p.profiles.full_name || p.profiles.email.split('@')[0]} (HCP: {p.profiles.handicap})
+                    {p.profiles.full_name || p.profiles.email.split('@')[0]} • {teamNameById[p.team_id] || 'No Team'}
                   </option>
                   ))
               ) : (

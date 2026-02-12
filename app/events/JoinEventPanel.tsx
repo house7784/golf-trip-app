@@ -29,7 +29,7 @@ export default function JoinEventPanel({
           name="inviteLink"
           type="text"
           required
-          placeholder="Paste organizer invite link"
+          placeholder="Paste invite code or organizer link"
           className="w-full bg-club-paper border border-club-gold/40 p-3 rounded-sm text-sm"
         />
         <button className="w-full bg-club-gold text-club-navy py-2 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-club-navy hover:text-white transition-all">

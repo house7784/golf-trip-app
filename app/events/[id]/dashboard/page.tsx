@@ -326,28 +326,10 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                             </span>
                         </div>
 
-                                                {!leaderboardActive && isOrganizer && (
-                                                    <form action={activateLeaderboard} className="mb-3">
-                                                        <input type="hidden" name="eventId" value={id} />
-                                                        <button className="w-full bg-club-navy text-white py-2 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-club-gold hover:text-club-navy transition-all">
-                                                            Activate Leaderboard
-                                                        </button>
-                                                    </form>
-                                                )}
-
-                                                {leaderboardActive && isOrganizer && (
-                                                    <form action={deactivateLeaderboard} className="mb-3">
-                                                        <input type="hidden" name="eventId" value={id} />
-                                                        <button className="w-full bg-red-100 text-red-700 py-2 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-red-200 transition-all">
-                                                            Deactivate Leaderboard
-                                                        </button>
-                                                    </form>
-                                                )}
-
                                                 {!leaderboardActive && (
                                                     <div className="mb-3 bg-club-paper p-3 rounded border border-club-gold/20">
                                                         <p className="text-xs text-club-text/70">
-                                                            Leaderboard names are hidden until the organizer activates scoring visibility.
+                                                            Leaderboard names are hidden until the organizer activates scoring visibility from Organizer Tools.
                                                         </p>
                                                     </div>
                                                 )}
@@ -498,7 +480,24 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
             <div className="mt-8 pt-8 border-t border-club-navy/10">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Organizer Tools</h3>
-                    <CopyInviteButton eventId={id} />
+                                        <div className="flex items-center gap-2">
+                                            {leaderboardActive ? (
+                                                <form action={deactivateLeaderboard}>
+                                                    <input type="hidden" name="eventId" value={id} />
+                                                    <button className="bg-red-100 text-red-700 py-2 px-3 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-red-200 transition-all">
+                                                        Lock Leaderboard
+                                                    </button>
+                                                </form>
+                                            ) : (
+                                                <form action={activateLeaderboard}>
+                                                    <input type="hidden" name="eventId" value={id} />
+                                                    <button className="bg-club-navy text-white py-2 px-3 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-club-gold hover:text-club-navy transition-all">
+                                                        Activate Leaderboard
+                                                    </button>
+                                                </form>
+                                            )}
+                                            <CopyInviteButton eventId={id} />
+                                        </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                     <Link href={`/events/${id}/teams`} className="bg-gray-200 p-3 rounded text-center">

@@ -67,9 +67,23 @@ export default async function TeeTimesPage({
 
   // 4. Fetch Players (including full_name)
   const { data: players } = await supabase
-    .from('event_players')
-    .select('profiles(id, email, handicap, full_name)')
+    .from('event_participants')
+    .select('team_id, profiles:user_id(id, email, handicap, handicap_index, full_name)')
     .eq('event_id', id)
+
+  const { data: teams } = await supabase
+    .from('teams')
+    .select('id, name')
+    .eq('event_id', id)
+
+  const teamNameById = Object.fromEntries((teams || []).map((team: any) => [team.id, team.name])) as Record<string, string>
+  const enforceTeamPairing = (teams || []).length >= 2
+  const participantByUserId = new Map<string, any>()
+  ;(players || []).forEach((entry: any) => {
+    if (entry?.profiles?.id) {
+      participantByUserId.set(entry.profiles.id, entry)
+    }
+  })
 
   // 5. Logic for Active Round
   const teeTimes = activeRound.tee_times || []
@@ -235,6 +249,8 @@ export default async function TeeTimesPage({
               {[0, 1, 2, 3].map((slotIndex) => {
                 const pairing = tt.pairings.find((p: any) => p.slot_number === slotIndex + 1)
                 const player = pairing?.profiles
+                const participant = pairing?.player_id ? participantByUserId.get(pairing.player_id) : null
+                const teamName = participant?.team_id ? teamNameById[participant.team_id] : 'No Team'
 
                 return (
                   <div key={slotIndex} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-transparent hover:border-club-gold/30 transition-colors group relative">
@@ -252,7 +268,11 @@ export default async function TeeTimesPage({
                             : 'Open Slot'
                           }
                         </span>
-                        {player && <span className="text-[10px] text-club-gold font-bold uppercase tracking-wider">HCP {player.handicap}</span>}
+                        {player && (
+                          <span className="text-[10px] text-club-gold font-bold uppercase tracking-wider">
+                            {teamName}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -263,6 +283,9 @@ export default async function TeeTimesPage({
                         player={player}
                         players={players || []}
                         takenIds={Array.from(assignedPlayerIds) as string[]}
+                        pairings={tt.pairings || []}
+                        enforceTeamPairing={enforceTeamPairing}
+                        teamNameById={teamNameById}
                       />
                     )}
                   </div>
