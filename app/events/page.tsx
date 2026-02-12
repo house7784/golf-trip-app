@@ -60,7 +60,7 @@ export default async function DashboardPage({
         <div className="grid gap-4">
             {events && events.length > 0 ? (
                 events.map((event) => (
-                    <Link key={event.id} href={`/events/${event.id}/tee-times`}>
+                    <Link key={event.id} href={`/events/${event.id}/dashboard`}>
                         <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-club-gold hover:shadow-md transition-all group cursor-pointer flex justify-between items-center">
                             <div>
                                 <h2 className="font-serif text-xl text-club-navy group-hover:text-club-gold transition-colors">

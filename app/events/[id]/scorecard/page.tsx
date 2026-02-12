@@ -136,6 +136,12 @@ export default async function ScorecardPage({
       ? query.playerId
       : user?.id || ''
 
+  const selectedPlayerName =
+    editablePlayers.find((entry) => entry.id === selectedPlayerId)?.name ||
+    participantById.get(selectedPlayerId)?.profiles?.full_name ||
+    participantById.get(selectedPlayerId)?.profiles?.email?.split('@')[0] ||
+    'Golfer'
+
   const canEditSelected = isOrganizer || !scoringLocked
   
   // 2. Get Existing Scores for this user
@@ -177,7 +183,12 @@ export default async function ScorecardPage({
                       href={`/events/${id}/scorecard?roundId=${activeRound.id}&playerId=${entry.id}`}
                       className="text-center px-3 py-2 rounded-lg text-sm font-bold tracking-wide border border-gray-300 bg-gray-50 !text-club-navy transition-colors"
                     >
-                      {entry.name}
+                      <span className="inline-flex items-center gap-2">
+                        <span>{entry.name}</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold bg-club-navy text-white">
+                          Selected
+                        </span>
+                      </span>
                     </Link>
                   )
                 }
@@ -231,6 +242,11 @@ export default async function ScorecardPage({
 
       {/* SCORECARD FORM */}
       <div className="max-w-md mx-auto">
+        <div className="mb-3 bg-club-paper border border-club-gold/30 rounded-lg px-3 py-2">
+          <p className="text-xs uppercase tracking-wider font-bold text-club-text/60">Entering Scores For</p>
+          <p className="text-base font-serif font-bold text-club-navy">{selectedPlayerName}</p>
+        </div>
+
         <form key={`${activeRound.id}:${selectedPlayerId}`} action={async (formData) => {
             'use server'
             const newScores: any = {}

@@ -148,6 +148,11 @@ export default async function Home({
         <div className="grid grid-cols-1 gap-4">
           <JoinEventPanel joinStatus={joinStatus} returnTo="/" />
 
+          <Link href="/events" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
+            <span className="font-bold uppercase tracking-wider text-sm">My Events</span>
+            <Calendar className="text-club-navy/50" />
+          </Link>
+
            {/* Link to Create NEW Event */}
           <Link href="/events/create" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
             <span className="font-bold uppercase tracking-wider text-sm">Create New Event</span>
