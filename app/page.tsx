@@ -2,10 +2,17 @@
 import { createClient } from '@/utils/supabase/server'
 import { Trophy, User, LogOut, Calendar, Activity, Crown, ArrowRight } from 'lucide-react'
 import { signOut } from '@/app/login/actions'
+import { joinEventByLink } from '@/app/events/actions'
 import Link from 'next/link'
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<{ join?: string }>
+}) {
   const supabase = await createClient()
+  const query = await searchParams
+  const joinStatus = query?.join
   
   // 1. Check if the user is logged in
   const { data: { user } } = await supabase.auth.getUser()
@@ -79,6 +86,17 @@ export default async function Home() {
       </nav>
 
       <div className="max-w-md mx-auto p-6 space-y-6">
+
+        {joinStatus && (
+          <div className="bg-white border border-club-gold/40 p-4 rounded-sm shadow-sm">
+            <p className="text-xs uppercase tracking-wider font-bold text-club-text/60 mb-1">Join Event</p>
+            <p className="text-sm text-club-navy">
+              {joinStatus === 'invalid_link' && 'That invite link is invalid. Paste the full event link from the organizer.'}
+              {joinStatus === 'event_not_found' && 'That event could not be found. Double-check the invite link and try again.'}
+              {joinStatus === 'failed' && 'Could not join this event right now. Please try again.'}
+            </p>
+          </div>
+        )}
         
         {/* Welcome Card */}
         <div className="bg-club-paper p-6 rounded-sm shadow-sm border-t-4 border-club-gold">
@@ -129,6 +147,20 @@ export default async function Home() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 gap-4">
+          <form action={joinEventByLink as any} className="bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm space-y-3">
+            <label className="block font-bold uppercase tracking-wider text-xs">Join Event</label>
+            <input
+              name="inviteLink"
+              type="text"
+              required
+              placeholder="Paste organizer invite link"
+              className="w-full bg-club-paper border border-club-gold/40 p-3 rounded-sm text-sm"
+            />
+            <button className="w-full bg-club-gold text-club-navy py-2 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-club-navy hover:text-white transition-all">
+              Join Event
+            </button>
+          </form>
+
            {/* Link to Create NEW Event */}
           <Link href="/events/create" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
             <span className="font-bold uppercase tracking-wider text-sm">Create New Event</span>

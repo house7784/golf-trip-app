@@ -11,6 +11,7 @@ import {
   Users, 
   Settings 
 } from 'lucide-react'
+import CopyInviteButton from './CopyInviteButton'
 
 export default async function EventDashboard({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -138,7 +139,10 @@ export default async function EventDashboard({ params }: { params: { id: string 
         {/* 4. ORGANIZER TOOLS (Conditional) */}
         {isOrganizer && (
             <div className="mt-8 pt-8 border-t border-club-navy/10">
-                <h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest mb-4">Organizer Tools</h3>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Organizer Tools</h3>
+                    <CopyInviteButton eventId={id} />
+                </div>
                 <div className="grid grid-cols-3 gap-3">
                     <Link href={`/events/${id}/teams`} className="bg-gray-200 p-3 rounded text-center">
                         <Users className="mx-auto mb-1 text-gray-600" size={20} />

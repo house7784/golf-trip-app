@@ -4,6 +4,21 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 
+function extractEventIdFromInvite(input: string) {
+  const value = input.trim()
+  if (!value) return null
+
+  const pathMatch = value.match(/\/events\/([^/?#]+)/i)
+  if (pathMatch?.[1]) return pathMatch[1]
+
+  const uuidLike = value.match(/[0-9a-fA-F-]{36}/)
+  if (uuidLike?.[0]) return uuidLike[0]
+
+  if (!value.includes('/')) return value
+
+  return null
+}
+
 export async function createEvent(formData: FormData) {
   const supabase = await createClient()
   
@@ -47,4 +62,54 @@ export async function createEvent(formData: FormData) {
 
   // 4. Redirect to the new "God Mode" Dashboard
   redirect(`/events/${event.id}/dashboard`)
+}
+
+export async function joinEventByLink(formData: FormData) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return redirect('/login')
+
+  const inviteLink = (formData.get('inviteLink') as string) || ''
+  const eventId = extractEventIdFromInvite(inviteLink)
+
+  if (!eventId) {
+    return redirect('/?join=invalid_link')
+  }
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .single()
+
+  if (!event) {
+    return redirect('/?join=event_not_found')
+  }
+
+  const { data: existingParticipant } = await supabase
+    .from('event_participants')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (existingParticipant) {
+    return redirect(`/events/${eventId}/dashboard?join=already`)
+  }
+
+  const { error: joinError } = await supabase
+    .from('event_participants')
+    .insert({
+      event_id: eventId,
+      user_id: user.id,
+      role: 'player'
+    })
+
+  if (joinError) {
+    console.error('Join event failed:', joinError)
+    return redirect('/?join=failed')
+  }
+
+  redirect(`/events/${eventId}/dashboard?join=success`)
 }
