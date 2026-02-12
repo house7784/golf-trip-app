@@ -67,6 +67,9 @@ export async function createEvent(formData: FormData) {
 export async function joinEventByLink(formData: FormData) {
   const supabase = await createClient()
 
+  const returnToInput = (formData.get('returnTo') as string) || '/events'
+  const returnTo = returnToInput.startsWith('/') ? returnToInput : '/events'
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return redirect('/login')
 
@@ -74,7 +77,7 @@ export async function joinEventByLink(formData: FormData) {
   const eventId = extractEventIdFromInvite(inviteLink)
 
   if (!eventId) {
-    return redirect('/?join=invalid_link')
+    return redirect(`${returnTo}?join=invalid_link`)
   }
 
   const { data: event } = await supabase
@@ -84,7 +87,7 @@ export async function joinEventByLink(formData: FormData) {
     .single()
 
   if (!event) {
-    return redirect('/?join=event_not_found')
+    return redirect(`${returnTo}?join=event_not_found`)
   }
 
   const { data: existingParticipant } = await supabase
@@ -108,7 +111,7 @@ export async function joinEventByLink(formData: FormData) {
 
   if (joinError) {
     console.error('Join event failed:', joinError)
-    return redirect('/?join=failed')
+    return redirect(`${returnTo}?join=failed`)
   }
 
   redirect(`/events/${eventId}/dashboard?join=success`)

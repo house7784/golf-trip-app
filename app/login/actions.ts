@@ -22,11 +22,10 @@ export async function login(formData: FormData) {
     return redirect('/login?error=Could not authenticate user')
   }
 
-  // 3. THE MISSING PIECE: Force the home page to refresh its data
   revalidatePath('/', 'layout')
+  revalidatePath('/events', 'layout')
   
-  // 4. Go to the dashboard
-  redirect('/')
+  redirect('/events')
 }
 
 export async function signup(formData: FormData) {
@@ -65,7 +64,8 @@ export async function signup(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  redirect('/')
+  revalidatePath('/events', 'layout')
+  redirect('/events')
 }
 
 export async function signOut() {
