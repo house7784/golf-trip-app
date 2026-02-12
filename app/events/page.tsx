@@ -16,6 +16,16 @@ export default async function DashboardPage({
 
   if (!user) redirect('/login')
 
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('handicap_index')
+        .eq('id', user.id)
+        .single()
+
+    if (profile?.handicap_index === null || profile?.handicap_index === undefined) {
+        redirect('/onboarding')
+    }
+
     const { data: participation } = await supabase
         .from('event_participants')
         .select('events(*)')

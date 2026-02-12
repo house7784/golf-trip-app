@@ -15,6 +15,16 @@ export default async function EventLayout({
   
   if (!user) redirect('/login')
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('handicap_index')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.handicap_index === null || profile?.handicap_index === undefined) {
+    redirect('/onboarding')
+  }
+
   // We pass the user to the chat so it knows who "You" are
   const currentUser = { id: user.id, email: user.email }
 

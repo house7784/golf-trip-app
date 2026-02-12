@@ -54,7 +54,7 @@ export async function signup(formData: FormData) {
         { 
           id: authData.user.id, 
           full_name: fullName,
-          handicap_index: 0 
+          handicap_index: null 
         }
       ])
       

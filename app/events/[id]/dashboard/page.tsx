@@ -10,19 +10,24 @@ import {
   Swords, 
   ClipboardList, 
   Users, 
-  Settings 
+    Settings,
+    Gauge
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
 import { activateLeaderboard, deactivateLeaderboard, postAnnouncement } from './actions'
+import { calculateNetTotal, clampHandicap, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 
 const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
 
 type ParticipantRow = {
     user_id: string
     team_id: string | null
+    event_handicap?: number | null
+    handicap_locked_at?: string | null
     profiles?: {
         full_name?: string | null
         email?: string | null
+        handicap_index?: number | null
     } | null
 }
 
@@ -34,6 +39,7 @@ type TeamRow = {
 type RoundRow = {
     id: string
     date: string
+    course_data?: { holes?: CourseHole[] } | null
 }
 
 type ScoreRow = {
@@ -69,6 +75,14 @@ function isSystemAnnouncement(row: any) {
     return row?.message === LEADERBOARD_ACTIVATION_MESSAGE || row?.content === LEADERBOARD_ACTIVATION_MESSAGE || row?.title === LEADERBOARD_ACTIVATION_MESSAGE
 }
 
+function isLockWindowActive(startDate: string | null | undefined) {
+    if (!startDate) return false
+    const now = new Date()
+    const lockStart = new Date(`${startDate}T00:00:00`)
+    lockStart.setDate(lockStart.getDate() - 7)
+    return now >= lockStart
+}
+
 export default async function EventDashboard({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params
@@ -100,7 +114,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
     const { data: roundsData } = await supabase
         .from('rounds')
-        .select('id, date')
+        .select('id, date, course_data')
         .eq('event_id', id)
 
     const rounds: RoundRow[] = (roundsData as RoundRow[] | null) || []
@@ -114,10 +128,52 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
     const { data: participantsData } = await supabase
         .from('event_participants')
-        .select('user_id, team_id, profiles:user_id(full_name, email)')
+                .select('id, user_id, team_id, event_handicap, handicap_locked_at, profiles:user_id(full_name, email, handicap_index)')
         .eq('event_id', id)
 
     const participants: ParticipantRow[] = (participantsData as ParticipantRow[] | null) || []
+
+        const handicapCap = event?.handicap_cap ?? null
+        const handicapApplication: HandicapApplicationMode =
+            event?.handicap_application === 'par3_one_then_next_hardest'
+                ? 'par3_one_then_next_hardest'
+                : 'standard'
+        const lockWindowActive = isLockWindowActive(event?.start_date)
+
+        if (lockWindowActive) {
+            const participantsToLock = participants.filter((entry) => entry.event_handicap === null || entry.event_handicap === undefined)
+
+            if (participantsToLock.length > 0) {
+                await Promise.all(
+                    participantsToLock.map(async (entry) => {
+                        const lockedValue = clampHandicap(Number(entry?.profiles?.handicap_index || 0), handicapCap)
+
+                        await supabase
+                            .from('event_participants')
+                            .update({
+                                event_handicap: lockedValue,
+                                handicap_locked_at: new Date().toISOString(),
+                            })
+                            .eq('event_id', id)
+                            .eq('user_id', entry.user_id)
+
+                        entry.event_handicap = lockedValue
+                        entry.handicap_locked_at = new Date().toISOString()
+                    })
+                )
+            }
+        }
+
+        const effectiveHandicapByUserId = new Map<string, number>()
+        participants.forEach((entry) => {
+            const profileHandicap = Number(entry?.profiles?.handicap_index || 0)
+            const cappedProfile = clampHandicap(profileHandicap, handicapCap)
+            const effective = entry.event_handicap === null || entry.event_handicap === undefined
+                ? cappedProfile
+                : Number(entry.event_handicap)
+
+            effectiveHandicapByUserId.set(entry.user_id, Math.max(0, effective || 0))
+        })
 
     const { data: teamsData } = await supabase
         .from('teams')
@@ -137,9 +193,20 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
         scores = (scoresData as ScoreRow[] | null) || []
     }
 
+    const roundById = new Map<string, RoundRow>()
+    sortedRounds.forEach((round) => roundById.set(round.id, round))
+
     const scoreMap = new Map<string, number>()
     scores.forEach((row) => {
-        scoreMap.set(`${row.round_id}:${row.user_id}`, totalScore(row.hole_scores))
+        const round = roundById.get(row.round_id)
+        const holes = (round?.course_data?.holes || []) as CourseHole[]
+        const handicap = effectiveHandicapByUserId.get(row.user_id) || 0
+
+        const netTotal = holes.length > 0
+          ? calculateNetTotal(row.hole_scores, holes, handicap, handicapApplication)
+          : totalScore(row.hole_scores)
+
+        scoreMap.set(`${row.round_id}:${row.user_id}`, netTotal)
     })
 
     const hasTeams = teams.length > 0
@@ -507,6 +574,10 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                     <Link href={`/events/${id}/modes`} className="bg-gray-200 p-3 rounded text-center">
                         <Settings className="mx-auto mb-1 text-gray-600" size={20} />
                         <span className="text-[10px] font-bold text-gray-600">Modes</span>
+                    </Link>
+                    <Link href={`/events/${id}/handicaps`} className="bg-gray-200 p-3 rounded text-center">
+                        <Gauge className="mx-auto mb-1 text-gray-600" size={20} />
+                        <span className="text-[10px] font-bold text-gray-600">Handicaps</span>
                     </Link>
                     {/* Add more admin tools here later */}
                 </div>

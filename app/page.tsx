@@ -1,5 +1,6 @@
 // app/page.tsx
 import { createClient } from '@/utils/supabase/server'
+import { redirect } from 'next/navigation'
 import { Trophy, User, LogOut, Calendar, Activity, Crown, ArrowRight } from 'lucide-react'
 import { signOut } from '@/app/login/actions'
 import JoinEventPanel from '@/app/events/JoinEventPanel'
@@ -24,6 +25,10 @@ export default async function Home({
   if (user) {
     const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     profile = data
+
+    if (profile?.handicap_index === null || profile?.handicap_index === undefined) {
+      redirect('/onboarding')
+    }
 
     // 3. Fetch events they are ORGANIZING
     const { data: participation } = await supabase
@@ -147,6 +152,11 @@ export default async function Home({
           <Link href="/scorecard" className="flex items-center justify-between bg-club-navy text-white p-4 rounded-sm shadow-lg hover:bg-club-navy/90 transition-all">
             <span className="font-bold uppercase tracking-wider text-sm">Enter Score</span>
             <Activity className="text-club-gold" />
+          </Link>
+
+          <Link href="/profile" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
+            <span className="font-bold uppercase tracking-wider text-sm">Edit Profile</span>
+            <User className="text-club-navy/50" />
           </Link>
           
           <button className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
