@@ -1,7 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, Megaphone, Send, Trash2 } from 'lucide-react'
-import { postAnnouncement, deleteAnnouncement } from '../dashboard/actions'
+import { postAnnouncement, deleteAnnouncement, LEADERBOARD_ACTIVATION_MESSAGE } from '../dashboard/actions'
 
 export default async function AnnouncementsPage({
   params,
@@ -12,6 +13,7 @@ export default async function AnnouncementsPage({
   const { id } = await params
 
   const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   const { data: participant } = await supabase
     .from('event_participants')
@@ -26,6 +28,7 @@ export default async function AnnouncementsPage({
     .from('announcements')
     .select('*')
     .eq('event_id', id)
+    .neq('message', LEADERBOARD_ACTIVATION_MESSAGE)
     .order('created_at', { ascending: false })
 
   return (
@@ -64,7 +67,7 @@ export default async function AnnouncementsPage({
                 <div className="flex items-start gap-3">
                   <Megaphone className="text-club-gold shrink-0 mt-1" size={16} />
                   <div className="flex-1">
-                    <p className="text-sm text-club-text">{note.message}</p>
+                    <p className="text-sm text-club-text">{note.message || note.content || note.title}</p>
                     <p className="text-[10px] text-gray-300 mt-2">
                       {new Date(note.created_at).toLocaleDateString()}
                     </p>

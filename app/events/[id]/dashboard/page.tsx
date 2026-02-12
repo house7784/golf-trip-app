@@ -13,7 +13,7 @@ import {
   Settings 
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
-import { postAnnouncement } from './actions'
+import { activateLeaderboard, deactivateLeaderboard, LEADERBOARD_ACTIVATION_MESSAGE, postAnnouncement } from './actions'
 
 type ParticipantRow = {
     user_id: string
@@ -38,6 +38,20 @@ type ScoreRow = {
     round_id: string
     user_id: string
     hole_scores: Record<string, number> | null
+}
+
+type PairingRow = {
+    slot_number: number
+    player_id: string | null
+    profiles?: {
+        full_name?: string | null
+        email?: string | null
+    } | null
+}
+
+type TeeTimeRow = {
+    id: string
+    pairings: PairingRow[]
 }
 
 function getDisplayName(profile?: { full_name?: string | null; email?: string | null } | null) {
@@ -72,8 +86,18 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
     .from('announcements')
     .select('*')
     .eq('event_id', id)
+        .neq('message', LEADERBOARD_ACTIVATION_MESSAGE)
     .order('created_at', { ascending: false })
     .limit(3)
+
+    const { data: activationMarker } = await supabase
+        .from('announcements')
+        .select('id')
+        .eq('event_id', id)
+        .eq('message', LEADERBOARD_ACTIVATION_MESSAGE)
+        .maybeSingle()
+
+    const leaderboardActive = Boolean(activationMarker)
 
     const { data: roundsData } = await supabase
         .from('rounds')
@@ -180,6 +204,68 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
     const currentDayLeaderboard = currentRound ? buildRoundStandings(currentRound.id) : []
 
+        let currentDayLeaderboardRows = currentDayLeaderboard
+        if (leaderboardActive && currentRound) {
+            const { data: teeTimesData } = await supabase
+                .from('tee_times')
+                .select('id, pairings(slot_number, player_id, profiles:player_id(full_name, email))')
+                .eq('round_id', currentRound.id)
+
+            const teeTimes = (teeTimesData as TeeTimeRow[] | null) || []
+            const pairEntries: Array<{ key: string; label: string; memberNames: string[]; memberIds: string[] }> = []
+            let pairNumber = 1
+
+            teeTimes.forEach((teeTime) => {
+                const sortedPairings = [...(teeTime.pairings || [])].sort((a, b) => a.slot_number - b.slot_number)
+                const groups = [
+                    sortedPairings.filter((pairing) => pairing.slot_number === 1 || pairing.slot_number === 2),
+                    sortedPairings.filter((pairing) => pairing.slot_number === 3 || pairing.slot_number === 4),
+                ]
+
+                groups.forEach((group, groupIndex) => {
+                    const players = group.filter((entry) => entry.player_id)
+                    if (players.length === 0) return
+
+                    pairEntries.push({
+                        key: `${teeTime.id}-pair-${groupIndex + 1}`,
+                        label: `Pair ${pairNumber++}`,
+                        memberNames: players.map((player) => getDisplayName(player.profiles)),
+                        memberIds: players.map((player) => player.player_id as string),
+                    })
+                })
+            })
+
+            if (pairEntries.length > 0) {
+                const rows = pairEntries.map((entry) => {
+                    let total = 0
+                    let scoredPlayers = 0
+
+                    entry.memberIds.forEach((memberId) => {
+                        const value = scoreMap.get(`${currentRound.id}:${memberId}`)
+                        if (value !== undefined) {
+                            total += value
+                            scoredPlayers += 1
+                        }
+                    })
+
+                    return {
+                        key: entry.key,
+                        label: entry.label,
+                        memberNames: entry.memberNames,
+                        score: scoredPlayers > 0 ? total : null,
+                    }
+                })
+
+                currentDayLeaderboardRows = rows.sort((a, b) => {
+                    if (a.score === null && b.score === null) return a.label.localeCompare(b.label)
+                    if (a.score === null) return 1
+                    if (b.score === null) return -1
+                    if (a.score !== b.score) return a.score - b.score
+                    return a.label.localeCompare(b.label)
+                })
+            }
+        }
+
     const overallPoints = new Map<string, number>()
     entries.forEach((entry) => overallPoints.set(entry.key, 0))
 
@@ -241,17 +327,47 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                             </span>
                         </div>
 
-                        {currentDayLeaderboard.length > 0 ? (
+                                                {!leaderboardActive && isOrganizer && (
+                                                    <form action={activateLeaderboard} className="mb-3">
+                                                        <input type="hidden" name="eventId" value={id} />
+                                                        <button className="w-full bg-club-navy text-white py-2 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-club-gold hover:text-club-navy transition-all">
+                                                            Activate Leaderboard
+                                                        </button>
+                                                    </form>
+                                                )}
+
+                                                {leaderboardActive && isOrganizer && (
+                                                    <form action={deactivateLeaderboard} className="mb-3">
+                                                        <input type="hidden" name="eventId" value={id} />
+                                                        <button className="w-full bg-red-100 text-red-700 py-2 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-red-200 transition-all">
+                                                            Deactivate Leaderboard
+                                                        </button>
+                                                    </form>
+                                                )}
+
+                                                {!leaderboardActive && (
+                                                    <div className="mb-3 bg-club-paper p-3 rounded border border-club-gold/20">
+                                                        <p className="text-xs text-club-text/70">
+                                                            Leaderboard names are hidden until the organizer activates scoring visibility.
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {currentDayLeaderboardRows.length > 0 ? (
                             <div className="space-y-2">
-                                {currentDayLeaderboard.map((row, index) => (
+                                                                {currentDayLeaderboardRows.map((row, index) => (
                                     <div key={row.key} className="flex items-center justify-between p-2 rounded-lg border border-gray-100">
                                         <div className="flex items-center gap-3 min-w-0">
                                             <div className="bg-club-navy text-white w-8 h-8 rounded-full flex items-center justify-center font-serif text-sm font-bold shrink-0">
                                                 {index + 1}
                                             </div>
                                             <div className="min-w-0">
-                                                <p className="font-bold text-sm text-club-navy truncate">{row.label}</p>
-                                                <p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
+                                                                                                <p className="font-bold text-sm text-club-navy truncate">{leaderboardActive ? row.label : `Position ${index + 1}`}</p>
+                                                                                                {leaderboardActive ? (
+                                                                                                    <p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
+                                                                                                ) : (
+                                                                                                    <p className="text-xs text-gray-400 truncate">Names hidden</p>
+                                                                                                )}
                                             </div>
                                         </div>
                                         <p className="font-serif font-bold text-club-navy text-lg">
@@ -282,8 +398,12 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                                                 {index + 1}
                                             </div>
                                             <div className="min-w-0">
-                                                <p className="font-bold text-sm text-club-navy truncate">{row.label}</p>
-                                                <p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
+                                                                                                <p className="font-bold text-sm text-club-navy truncate">{leaderboardActive ? row.label : `Position ${index + 1}`}</p>
+                                                                                                {leaderboardActive ? (
+                                                                                                    <p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
+                                                                                                ) : (
+                                                                                                    <p className="text-xs text-gray-400 truncate">Names hidden</p>
+                                                                                                )}
                                             </div>
                                         </div>
                                         <p className="font-serif font-bold text-club-navy text-lg">{row.points}</p>
@@ -330,7 +450,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                             <div className="flex items-start gap-3">
                                 <Megaphone className="text-club-gold shrink-0 mt-1" size={16} />
                                 <div>
-                                    <p className="text-sm text-club-text mt-1">{item.message}</p>
+                                    <p className="text-sm text-club-text mt-1">{item.message || item.content || item.title}</p>
                                     <p className="text-[10px] text-gray-300 mt-2">
                                         {new Date(item.created_at).toLocaleDateString()}
                                     </p>
