@@ -38,5 +38,5 @@ export async function submitScore(eventId: string, roundId: string, userId: stri
   if (error) throw new Error('Failed to submit score')
 
   revalidatePath(`/events/${eventId}/scorecard`)
-  revalidatePath(`/events/${eventId}/leaderboard`)
+  revalidatePath(`/events/${eventId}/dashboard`)
 }

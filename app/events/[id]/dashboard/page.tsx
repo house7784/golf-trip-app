@@ -5,6 +5,7 @@ import {
   Calendar, 
   Trophy, 
   Megaphone, 
+    Send,
   Edit, 
   Swords, 
   ClipboardList, 
@@ -12,6 +13,41 @@ import {
   Settings 
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
+import { postAnnouncement } from './actions'
+
+type ParticipantRow = {
+    user_id: string
+    team_id: string | null
+    profiles?: {
+        full_name?: string | null
+        email?: string | null
+    } | null
+}
+
+type TeamRow = {
+    id: string
+    name: string
+}
+
+type RoundRow = {
+    id: string
+    date: string
+}
+
+type ScoreRow = {
+    round_id: string
+    user_id: string
+    hole_scores: Record<string, number> | null
+}
+
+function getDisplayName(profile?: { full_name?: string | null; email?: string | null } | null) {
+    return profile?.full_name || profile?.email?.split('@')[0] || 'Golfer'
+}
+
+function totalScore(holeScores: Record<string, number> | null | undefined) {
+    if (!holeScores) return 0
+    return Object.values(holeScores).reduce((sum, value) => sum + (Number(value) || 0), 0)
+}
 
 export default async function EventDashboard({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
@@ -39,6 +75,145 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
     .order('created_at', { ascending: false })
     .limit(3)
 
+    const { data: roundsData } = await supabase
+        .from('rounds')
+        .select('id, date')
+        .eq('event_id', id)
+
+    const rounds: RoundRow[] = (roundsData as RoundRow[] | null) || []
+    const sortedRounds = [...rounds].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    const today = new Date().toISOString().split('T')[0]
+    const currentRound =
+        sortedRounds.find((round) => round.date === today) ||
+        [...sortedRounds].reverse().find((round) => round.date <= today) ||
+        sortedRounds[0] ||
+        null
+
+    const { data: participantsData } = await supabase
+        .from('event_participants')
+        .select('user_id, team_id, profiles:user_id(full_name, email)')
+        .eq('event_id', id)
+
+    const participants: ParticipantRow[] = (participantsData as ParticipantRow[] | null) || []
+
+    const { data: teamsData } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('event_id', id)
+
+    const teams: TeamRow[] = (teamsData as TeamRow[] | null) || []
+
+    let scores: ScoreRow[] = []
+    if (sortedRounds.length > 0) {
+        const roundIds = sortedRounds.map((round) => round.id)
+        const { data: scoresData } = await supabase
+            .from('scores')
+            .select('round_id, user_id, hole_scores')
+            .in('round_id', roundIds)
+
+        scores = (scoresData as ScoreRow[] | null) || []
+    }
+
+    const scoreMap = new Map<string, number>()
+    scores.forEach((row) => {
+        scoreMap.set(`${row.round_id}:${row.user_id}`, totalScore(row.hole_scores))
+    })
+
+    const hasTeams = teams.length > 0
+
+    const entries = hasTeams
+        ? [
+                ...teams.map((team) => {
+                    const members = participants.filter((participant) => participant.team_id === team.id)
+                    return {
+                        key: team.id,
+                        label: team.name,
+                        memberNames: members.map((member) => getDisplayName(member.profiles)),
+                        memberIds: members.map((member) => member.user_id),
+                    }
+                }),
+                ...participants
+                    .filter((participant) => !participant.team_id)
+                    .map((participant) => ({
+                        key: `solo-${participant.user_id}`,
+                        label: getDisplayName(participant.profiles),
+                        memberNames: [getDisplayName(participant.profiles)],
+                        memberIds: [participant.user_id],
+                    })),
+            ]
+        : participants.map((participant) => ({
+                key: `solo-${participant.user_id}`,
+                label: getDisplayName(participant.profiles),
+                memberNames: [getDisplayName(participant.profiles)],
+                memberIds: [participant.user_id],
+            }))
+
+    const buildRoundStandings = (roundId: string) => {
+        const rows = entries.map((entry) => {
+            let total = 0
+            let scoredPlayers = 0
+
+            entry.memberIds.forEach((memberId) => {
+                const value = scoreMap.get(`${roundId}:${memberId}`)
+                if (value !== undefined) {
+                    total += value
+                    scoredPlayers += 1
+                }
+            })
+
+            return {
+                key: entry.key,
+                label: entry.label,
+                memberNames: entry.memberNames,
+                score: scoredPlayers > 0 ? total : null,
+            }
+        })
+
+        return rows.sort((a, b) => {
+            if (a.score === null && b.score === null) return a.label.localeCompare(b.label)
+            if (a.score === null) return 1
+            if (b.score === null) return -1
+            if (a.score !== b.score) return a.score - b.score
+            return a.label.localeCompare(b.label)
+        })
+    }
+
+    const currentDayLeaderboard = currentRound ? buildRoundStandings(currentRound.id) : []
+
+    const overallPoints = new Map<string, number>()
+    entries.forEach((entry) => overallPoints.set(entry.key, 0))
+
+    sortedRounds.forEach((round) => {
+        const standings = buildRoundStandings(round.id).filter((row) => row.score !== null)
+        const teamCount = standings.length
+        if (teamCount === 0) return
+
+        let rank = 0
+        let previousScore: number | null = null
+
+        standings.forEach((row, index) => {
+            if (row.score !== previousScore) {
+                rank = index + 1
+                previousScore = row.score
+            }
+
+            const roundPoints = teamCount - rank + 1
+            overallPoints.set(row.key, (overallPoints.get(row.key) || 0) + roundPoints)
+        })
+    })
+
+    const overallLeaderboard = entries
+        .map((entry) => ({
+            key: entry.key,
+            label: entry.label,
+            memberNames: entry.memberNames,
+            points: overallPoints.get(entry.key) || 0,
+        }))
+        .sort((a, b) => {
+            if (a.points !== b.points) return b.points - a.points
+            return a.label.localeCompare(b.label)
+        })
+
   return (
     <main className="min-h-screen bg-club-cream text-club-navy pb-20">
       
@@ -56,49 +231,112 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
       <div className="p-6 space-y-6 -mt-4 relative z-20">
 
-        {/* 1. LEADERBOARD PREVIEW CARD */}
-        <Link href={`/events/${id}/leaderboard`} className="block bg-white p-4 rounded-xl shadow-md border-b-4 border-club-gold active:scale-95 transition-transform">
-            <div className="flex justify-between items-center mb-2">
-                <h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Current Leader</h3>
-                <span className="text-xs text-club-gold font-bold">View Full &rarr;</span>
-            </div>
-            <div className="flex items-center gap-4">
-                <div className="bg-club-navy text-white w-12 h-12 rounded-full flex items-center justify-center font-serif text-xl font-bold">
-                    1
+                {/* 1. LEADERBOARDS */}
+                <div id="leaderboards" className="space-y-4">
+                    <div className="bg-white p-4 rounded-xl shadow-md border-b-4 border-club-gold">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Current Day Leaderboard</h3>
+                            <span className="text-[10px] uppercase tracking-wider text-club-navy/60 font-bold">
+                                {currentRound ? new Date(`${currentRound.date}T00:00:00`).toLocaleDateString() : 'No Round Set'}
+                            </span>
+                        </div>
+
+                        {currentDayLeaderboard.length > 0 ? (
+                            <div className="space-y-2">
+                                {currentDayLeaderboard.map((row, index) => (
+                                    <div key={row.key} className="flex items-center justify-between p-2 rounded-lg border border-gray-100">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="bg-club-navy text-white w-8 h-8 rounded-full flex items-center justify-center font-serif text-sm font-bold shrink-0">
+                                                {index + 1}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-bold text-sm text-club-navy truncate">{row.label}</p>
+                                                <p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
+                                            </div>
+                                        </div>
+                                        <p className="font-serif font-bold text-club-navy text-lg">
+                                            {row.score === null ? '--' : row.score}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="bg-white/50 p-4 rounded-lg border border-dashed border-gray-300 text-center">
+                                <p className="text-sm text-gray-400 italic">No scores posted for today yet.</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white p-4 rounded-xl shadow-md border-b-4 border-club-navy">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Overall Team Leaderboard</h3>
+                            <span className="text-[10px] uppercase tracking-wider text-club-navy/60 font-bold">Total Points</span>
+                        </div>
+
+                        {overallLeaderboard.length > 0 ? (
+                            <div className="space-y-2">
+                                {overallLeaderboard.map((row, index) => (
+                                    <div key={row.key} className="flex items-center justify-between p-2 rounded-lg border border-gray-100">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="bg-club-gold text-club-navy w-8 h-8 rounded-full flex items-center justify-center font-serif text-sm font-bold shrink-0">
+                                                {index + 1}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-bold text-sm text-club-navy truncate">{row.label}</p>
+                                                <p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
+                                            </div>
+                                        </div>
+                                        <p className="font-serif font-bold text-club-navy text-lg">{row.points}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="bg-white/50 p-4 rounded-lg border border-dashed border-gray-300 text-center">
+                                <p className="text-sm text-gray-400 italic">No teams or scores available yet.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <div>
-                    <p className="font-serif text-lg leading-none">Tiger Woods</p>
-                    <p className="text-sm text-green-600 font-bold">-4 (Thru 9)</p>
-                </div>
-            </div>
-        </Link>
 
         {/* 2. ANNOUNCEMENTS */}
         <div>
             <div className="flex justify-between items-end mb-2 px-1">
                 <h3 className="font-serif text-lg">Announcements</h3>
-                {isOrganizer && (
-                    <Link href={`/events/${id}/announcements/new`} className="text-xs text-club-navy underline">
-                        + Post
-                    </Link>
-                )}
+                <Link href={`/events/${id}/announcements`} className="text-xs text-club-navy underline">
+                    View All
+                </Link>
             </div>
+
+            {isOrganizer && (
+              <form action={postAnnouncement} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mb-3 flex gap-2">
+                <input type="hidden" name="eventId" value={id} />
+                <input
+                  type="text"
+                  name="message"
+                  placeholder="Post an announcement..."
+                  required
+                  className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-club-gold"
+                />
+                <button className="bg-club-navy text-white px-4 py-2 rounded-lg hover:bg-club-gold hover:text-club-navy transition-colors">
+                  <Send size={16} />
+                </button>
+              </form>
+            )}
             
             {announcements && announcements.length > 0 ? (
                 <div className="space-y-3">
                     {announcements.map((item: any) => (
-                        <div key={item.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                        <Link key={item.id} href={`/events/${id}/announcements`} className="block bg-white p-4 rounded-lg shadow-sm border border-gray-100 hover:border-club-gold/40 transition-colors">
                             <div className="flex items-start gap-3">
                                 <Megaphone className="text-club-gold shrink-0 mt-1" size={16} />
                                 <div>
-                                    <h4 className="font-bold text-sm text-club-navy">{item.title}</h4>
-                                    <p className="text-sm text-club-text mt-1">{item.content}</p>
+                                    <p className="text-sm text-club-text mt-1">{item.message}</p>
                                     <p className="text-[10px] text-gray-300 mt-2">
                                         {new Date(item.created_at).toLocaleDateString()}
                                     </p>
                                 </div>
                             </div>
-                        </div>
+                        </Link>
                     ))}
                 </div>
             ) : (
@@ -130,7 +368,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
             </Link>
 
             {/* Full Leaderboard */}
-            <Link href={`/events/${id}/leaderboard`} className="bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition">
+            <Link href={`/events/${id}/dashboard#leaderboards`} className="bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition">
                 <ClipboardList size={28} className="text-club-gold" />
                 <span className="font-bold text-xs uppercase tracking-wider">Standings</span>
             </Link>

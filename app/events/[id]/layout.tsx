@@ -31,7 +31,7 @@ export default async function EventLayout({
             </Link>
             <div className="space-x-6 text-sm font-bold uppercase tracking-widest">
                 <Link href={`/events/${id}/tee-times`} className="hover:text-club-gold transition">Tee Times</Link>
-                <Link href={`/events/${id}/leaderboard`} className="hover:text-club-gold transition text-gray-500 cursor-not-allowed" title="Coming Soon">Leaderboard</Link>
+              <Link href={`/events/${id}/dashboard#leaderboards`} className="hover:text-club-gold transition">Leaderboard</Link>
             </div>
         </div>
       </nav>
