@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ChevronLeft, User, Crown } from 'lucide-react'
 import { updateTeamStructure, assignPlayer, setCaptain } from './actions'
 
-export default async function TeamsPage({ params }: { params: { id: string } }) {
+export default async function TeamsPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params
 

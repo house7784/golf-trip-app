@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
 
-export default async function EventDashboard({ params }: { params: { id: string } }) {
+export default async function EventDashboard({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params
 

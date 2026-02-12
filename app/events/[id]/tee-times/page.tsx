@@ -20,8 +20,8 @@ export default async function TeeTimesPage({
   params, 
   searchParams 
 }: { 
-  params: { id: string },
-  searchParams: { roundId?: string } 
+  params: Promise<{ id: string }>,
+  searchParams: Promise<{ roundId?: string }> 
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

@@ -19,7 +19,7 @@ function getDatesInRange(startDate: string, endDate: string) {
   return dates
 }
 
-export default async function GameModesPage({ params }: { params: { id: string } }) {
+export default async function GameModesPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params // Next.js 15 requirement
 

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ChevronLeft, Save } from 'lucide-react'
 import { submitScore } from './actions'
 
-export default async function ScorecardPage({ params }: { params: { id: string } }) {
+export default async function ScorecardPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { id } = await params
   const { data: { user } } = await supabase.auth.getUser()
