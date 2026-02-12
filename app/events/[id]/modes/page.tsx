@@ -37,7 +37,7 @@ export default async function GameModesPage({ params }: { params: Promise<{ id: 
       
       {/* Header */}
       <div className="max-w-md mx-auto mb-8 flex items-center gap-4">
-        <Link href={`/events/${id}/dashboard`} className="bg-white p-2 rounded-sm border border-club-navy/10 shadow-sm">
+        <Link href={`/events/${id}/dashboard`} className="bg-white text-club-navy p-2 rounded-sm border border-club-navy/10 shadow-sm">
           <ChevronLeft size={20} />
         </Link>
         <div>

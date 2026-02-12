@@ -256,6 +256,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                 key: entry.key,
                 label: entry.label,
                 memberNames: entry.memberNames,
+                memberIds: entry.memberIds,
                 score: scoredPlayers > 0 ? total : null,
             }
         })
@@ -319,6 +320,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
                         key: entry.key,
                         label: entry.label,
                         memberNames: entry.memberNames,
+                        memberIds: entry.memberIds,
                         score: scoredPlayers > 0 ? total : null,
                     }
                 })
@@ -404,26 +406,51 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
                                                 {currentDayLeaderboardRows.length > 0 ? (
                             <div className="space-y-2">
-                                                                {currentDayLeaderboardRows.map((row, index) => (
-                                    <div key={row.key} className="flex items-center justify-between p-2 rounded-lg border border-gray-100">
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <div className="bg-club-navy text-white w-8 h-8 rounded-full flex items-center justify-center font-serif text-sm font-bold shrink-0">
-                                                {index + 1}
+                                                                {currentDayLeaderboardRows.map((row, index) => {
+                                    const canOpenScorecards = leaderboardActive && currentRound && row.memberIds.length > 0
+                                    const rowHref = canOpenScorecards
+                                        ? `/events/${id}/scorecards?roundId=${currentRound.id}&players=${encodeURIComponent(row.memberIds.join(','))}`
+                                        : null
+
+                                    const rowContent = (
+                                        <>
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="bg-club-navy text-white w-8 h-8 rounded-full flex items-center justify-center font-serif text-sm font-bold shrink-0">
+                                                    {index + 1}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="font-bold text-sm text-club-navy truncate">{leaderboardActive ? row.label : `Position ${index + 1}`}</p>
+                                                    {leaderboardActive ? (
+                                                        <p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
+                                                    ) : (
+                                                        <p className="text-xs text-gray-400 truncate">Names hidden</p>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="min-w-0">
-                                                                                                <p className="font-bold text-sm text-club-navy truncate">{leaderboardActive ? row.label : `Position ${index + 1}`}</p>
-                                                                                                {leaderboardActive ? (
-                                                                                                    <p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
-                                                                                                ) : (
-                                                                                                    <p className="text-xs text-gray-400 truncate">Names hidden</p>
-                                                                                                )}
-                                            </div>
+                                            <p className="font-serif font-bold text-club-navy text-lg">
+                                                {row.score === null ? '--' : row.score}
+                                            </p>
+                                        </>
+                                    )
+
+                                    if (rowHref) {
+                                        return (
+                                            <Link
+                                                key={row.key}
+                                                href={rowHref}
+                                                className="flex items-center justify-between p-2 rounded-lg border border-gray-100 hover:border-club-gold/50 hover:bg-club-paper/40 transition-colors"
+                                            >
+                                                {rowContent}
+                                            </Link>
+                                        )
+                                    }
+
+                                    return (
+                                        <div key={row.key} className="flex items-center justify-between p-2 rounded-lg border border-gray-100">
+                                            {rowContent}
                                         </div>
-                                        <p className="font-serif font-bold text-club-navy text-lg">
-                                            {row.score === null ? '--' : row.score}
-                                        </p>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         ) : (
                             <div className="bg-white/50 p-4 rounded-lg border border-dashed border-gray-300 text-center">

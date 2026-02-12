@@ -152,7 +152,7 @@ export default async function ScorecardPage({
     <main className="min-h-screen bg-club-cream text-club-navy p-6 pb-24">
       {/* Header */}
       <div className="max-w-md mx-auto mb-6 flex items-center gap-4 sticky top-0 bg-club-cream py-4 z-10 border-b border-club-gold/10">
-        <Link href={`/events/${id}/dashboard`} className="bg-white p-2 rounded-sm border border-club-navy/10 shadow-sm">
+        <Link href={`/events/${id}/dashboard`} className="bg-white text-club-navy p-2 rounded-sm border border-club-navy/10 shadow-sm">
           <ChevronLeft size={20} />
         </Link>
         <div>
@@ -170,15 +170,23 @@ export default async function ScorecardPage({
             <div className="grid grid-cols-2 gap-2">
               {editablePlayers.map((entry) => {
                 const isActive = entry.id === selectedPlayerId
+                if (isActive) {
+                  return (
+                    <Link
+                      key={entry.id}
+                      href={`/events/${id}/scorecard?roundId=${activeRound.id}&playerId=${entry.id}`}
+                      className="text-center px-3 py-2 rounded-lg text-sm font-bold tracking-wide border border-club-navy bg-club-navy text-white transition-colors"
+                    >
+                      {entry.name}
+                    </Link>
+                  )
+                }
+
                 return (
                   <Link
                     key={entry.id}
                     href={`/events/${id}/scorecard?roundId=${activeRound.id}&playerId=${entry.id}`}
-                    className={`text-center px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-colors ${
-                      isActive
-                        ? 'bg-club-navy text-white border-club-navy'
-                        : 'bg-gray-50 text-club-navy border-gray-200 hover:border-club-gold'
-                    }`}
+                    className="text-center px-3 py-2 rounded-lg text-sm font-semibold tracking-wide border border-gray-300 bg-white text-club-navy hover:border-club-gold hover:bg-club-paper/50 transition-colors"
                   >
                     {entry.name}
                   </Link>

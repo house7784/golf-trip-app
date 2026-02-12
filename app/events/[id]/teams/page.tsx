@@ -40,7 +40,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ id: stri
                         await setCaptain(currentTeamId, p.profiles.id, id)
                     }}>
                         <button 
-                            className={`p-1 rounded transition-all ${isCaptain ? 'text-club-gold hover:bg-club-gold/20' : 'text-gray-200 hover:text-club-gold hover:bg-gray-50'}`}
+                            className={`p-1 rounded transition-all ${isCaptain ? 'text-club-gold hover:bg-club-gold/20' : 'text-gray-500 hover:text-club-gold hover:bg-gray-50'}`}
                             title={isCaptain ? "Current Captain" : "Make Captain"}
                         >
                             <Crown size={20} fill={isCaptain ? "currentColor" : "none"} />
@@ -84,7 +84,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ id: stri
       
       {/* Header */}
       <div className="max-w-6xl mx-auto mb-8 flex items-center gap-4">
-        <Link href={`/events/${id}/dashboard`} className="bg-white p-2 rounded-sm border border-club-navy/10 shadow-sm">
+                <Link href={`/events/${id}/dashboard`} className="bg-white text-club-navy p-2 rounded-sm border border-club-navy/10 shadow-sm">
           <ChevronLeft size={20} />
         </Link>
         <div>
