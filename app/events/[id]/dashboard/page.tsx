@@ -13,7 +13,9 @@ import {
   Settings 
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
-import { activateLeaderboard, deactivateLeaderboard, LEADERBOARD_ACTIVATION_MESSAGE, postAnnouncement } from './actions'
+import { activateLeaderboard, deactivateLeaderboard, postAnnouncement } from './actions'
+
+const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
 
 type ParticipantRow = {
     user_id: string

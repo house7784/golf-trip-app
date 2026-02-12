@@ -2,7 +2,9 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, Megaphone, Send, Trash2 } from 'lucide-react'
-import { postAnnouncement, deleteAnnouncement, LEADERBOARD_ACTIVATION_MESSAGE } from '../dashboard/actions'
+import { postAnnouncement, deleteAnnouncement } from '../dashboard/actions'
+
+const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
 
 export default async function AnnouncementsPage({
   params,
