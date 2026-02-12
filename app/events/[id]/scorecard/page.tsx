@@ -68,6 +68,7 @@ export default async function ScorecardPage({
     .maybeSingle()
 
   const isCaptain = Boolean(captainTeam?.id)
+  const isTeamManageMode = query?.scope === 'team' && (isCaptain || isOrganizer)
 
   const { data: roundData } = await supabase
     .from('rounds')
@@ -95,11 +96,15 @@ export default async function ScorecardPage({
   const editableUserIds = new Set<string>()
   if (user?.id) editableUserIds.add(user.id)
 
+  const partnerEditableUserIds = new Set<string>()
+  if (user?.id) partnerEditableUserIds.add(user.id)
+
   if (actorPair) {
     ;(pairings || []).forEach((entry: any) => {
       if (!entry.player_id) return
       if (entry.tee_time_id === actorPair.tee_time_id && samePair(entry.slot_number, actorPair.slot_number)) {
         editableUserIds.add(entry.player_id)
+        partnerEditableUserIds.add(entry.player_id)
       }
     })
   }
@@ -114,7 +119,9 @@ export default async function ScorecardPage({
     ;(participants || []).forEach((entry: any) => editableUserIds.add(entry.user_id))
   }
 
-  const editablePlayers = Array.from(editableUserIds)
+  const selectableUserIds = isTeamManageMode ? editableUserIds : partnerEditableUserIds
+
+  const editablePlayers = Array.from(selectableUserIds)
     .map((playerId) => ({
       id: playerId,
       name:
@@ -125,7 +132,7 @@ export default async function ScorecardPage({
     .sort((a, b) => a.name.localeCompare(b.name))
 
   const selectedPlayerId =
-    query?.playerId && editableUserIds.has(query.playerId)
+    query?.playerId && selectableUserIds.has(query.playerId)
       ? query.playerId
       : user?.id || ''
 
@@ -154,12 +161,41 @@ export default async function ScorecardPage({
         </div>
       </div>
 
-      {editablePlayers.length > 1 && (
+      {!isTeamManageMode && editablePlayers.length > 0 && (
+        <div className="max-w-md mx-auto mb-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <label className="block text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">
+              Scoring For (You + Partner)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {editablePlayers.map((entry) => {
+                const isActive = entry.id === selectedPlayerId
+                return (
+                  <Link
+                    key={entry.id}
+                    href={`/events/${id}/scorecard?roundId=${activeRound.id}&playerId=${entry.id}`}
+                    className={`text-center px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border transition-colors ${
+                      isActive
+                        ? 'bg-club-navy text-white border-club-navy'
+                        : 'bg-gray-50 text-club-navy border-gray-200 hover:border-club-gold'
+                    }`}
+                  >
+                    {entry.name}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isTeamManageMode && editablePlayers.length > 1 && (
         <div className="max-w-md mx-auto mb-4">
           <form method="get" className="bg-white rounded-lg border border-gray-200 p-3">
             <input type="hidden" name="roundId" value={activeRound.id} />
+            <input type="hidden" name="scope" value="team" />
             <label className="block text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">
-              Scoring For
+              Manage Team Scores
             </label>
             <div className="flex items-center gap-2">
               <select
@@ -187,7 +223,7 @@ export default async function ScorecardPage({
 
       {/* SCORECARD FORM */}
       <div className="max-w-md mx-auto">
-        <form action={async (formData) => {
+        <form key={`${activeRound.id}:${selectedPlayerId}`} action={async (formData) => {
             'use server'
             const newScores: any = {}
             // Extract scores from form
