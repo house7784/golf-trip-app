@@ -161,16 +161,20 @@ export default async function ScorecardPage({
             <label className="block text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">
               Scoring For
             </label>
-            <select
-              name="playerId"
-              defaultValue={selectedPlayerId}
-              onChange={(e) => e.currentTarget.form?.requestSubmit()}
-              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            >
-              {editablePlayers.map((entry) => (
-                <option key={entry.id} value={entry.id}>{entry.name}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                name="playerId"
+                defaultValue={selectedPlayerId}
+                className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              >
+                {editablePlayers.map((entry) => (
+                  <option key={entry.id} value={entry.id}>{entry.name}</option>
+                ))}
+              </select>
+              <button className="bg-club-navy text-white px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-club-gold hover:text-club-navy transition-colors">
+                Load
+              </button>
+            </div>
           </form>
         </div>
       )}
