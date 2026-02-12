@@ -175,7 +175,7 @@ export default async function ScorecardPage({
                     <Link
                       key={entry.id}
                       href={`/events/${id}/scorecard?roundId=${activeRound.id}&playerId=${entry.id}`}
-                      className="text-center px-3 py-2 rounded-lg text-sm font-bold tracking-wide border border-club-navy bg-club-navy text-white transition-colors"
+                      className="text-center px-3 py-2 rounded-lg text-sm font-bold tracking-wide border border-gray-300 bg-gray-50 !text-club-navy transition-colors"
                     >
                       {entry.name}
                     </Link>
@@ -186,7 +186,7 @@ export default async function ScorecardPage({
                   <Link
                     key={entry.id}
                     href={`/events/${id}/scorecard?roundId=${activeRound.id}&playerId=${entry.id}`}
-                    className="text-center px-3 py-2 rounded-lg text-sm font-semibold tracking-wide border border-gray-300 bg-white text-club-navy hover:border-club-gold hover:bg-club-paper/50 transition-colors"
+                    className="text-center px-3 py-2 rounded-lg text-sm font-semibold tracking-wide border border-gray-300 bg-white !text-club-navy hover:border-club-gold hover:bg-club-paper/50 transition-colors"
                   >
                     {entry.name}
                   </Link>
