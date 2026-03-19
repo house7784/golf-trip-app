@@ -5,8 +5,14 @@ import Link from 'next/link'
 import { ChevronLeft, Calendar, Flag } from 'lucide-react'
 import { createEvent } from '@/app/events/actions'
 
-export default async function CreateEventPage() {
+export default async function CreateEventPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ error?: string }>
+}) {
   const supabase = await createClient()
+  const query = await searchParams
+  const error = query?.error
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -21,6 +27,12 @@ export default async function CreateEventPage() {
 
       <div className="max-w-md mx-auto bg-club-paper p-8 rounded-sm shadow-xl border-t-4 border-club-gold">
         <form action={createEvent as any} className="space-y-6">
+
+          {error && (
+            <div className="bg-white border border-red-200 p-3 rounded-sm text-sm text-red-700">
+              {error}
+            </div>
+          )}
           
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-xs uppercase tracking-wider font-bold text-club-text/60">
@@ -35,13 +47,26 @@ export default async function CreateEventPage() {
             />
           </div>
 
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-xs uppercase tracking-wider font-bold text-club-text/60">
+              Location
+            </label>
+            <input
+              name="location"
+              type="text"
+              placeholder="Myrtle Beach"
+              required
+              className="w-full bg-white border border-club-gold/40 p-3 rounded-sm font-serif"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-xs uppercase tracking-wider font-bold text-club-text/60">
                 <Calendar size={14} /> Start Date
               </label>
               <input 
-                name="startDate" 
+                name="start_date" 
                 type="date" 
                 required
                 className="w-full bg-white border border-club-gold/40 p-3 rounded-sm font-serif"
@@ -52,7 +77,7 @@ export default async function CreateEventPage() {
                 End Date
               </label>
               <input 
-                name="endDate" 
+                name="end_date" 
                 type="date" 
                 required
                 className="w-full bg-white border border-club-gold/40 p-3 rounded-sm font-serif"

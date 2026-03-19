@@ -21,10 +21,17 @@ function extractEventIdFromInvite(input: string) {
 export async function createEvent(formData: FormData) {
   const supabase = await createClient()
 
-  const name = formData.get('name') as string
-  const location = formData.get('location') as string
-  const startDate = formData.get('start_date') as string
-  const endDate = formData.get('end_date') as string
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return redirect('/login')
+
+  const name = ((formData.get('name') as string) || '').trim()
+  const location = ((formData.get('location') as string) || '').trim()
+  const startDate = ((formData.get('start_date') as string) || (formData.get('startDate') as string) || '').trim()
+  const endDate = ((formData.get('end_date') as string) || (formData.get('endDate') as string) || '').trim()
+
+  if (!name || !location || !startDate || !endDate) {
+    return redirect('/events/create?error=Please fill in all event fields.')
+  }
   
   // 1. Generate a random 6-character code
   const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase()
@@ -37,24 +44,27 @@ export async function createEvent(formData: FormData) {
       location,
       start_date: startDate,
       end_date: endDate,
-      invite_code: inviteCode // <--- ADD THIS
+      invite_code: inviteCode,
+      created_by: user.id,
     })
     .select()
     .single()
 
   if (error) {
     console.error(error)
-    return
+    return redirect('/events/create?error=Could not create event. Please try again.')
   }
 
   // 3. Add Creator as Organizer
-  const { data: { user } } = await supabase.auth.getUser()
-  if (user) {
-    await supabase.from('event_participants').insert({
-      event_id: event.id,
-      user_id: user.id,
-      role: 'organizer'
-    })
+  const { error: participantError } = await supabase.from('event_participants').insert({
+    event_id: event.id,
+    user_id: user.id,
+    role: 'organizer'
+  })
+
+  if (participantError) {
+    console.error(participantError)
+    return redirect('/events/create?error=Event created, but organizer setup failed. Please retry.')
   }
 
   redirect(`/events/${event.id}/dashboard`)
