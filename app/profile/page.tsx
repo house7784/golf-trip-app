@@ -22,6 +22,12 @@ export default async function ProfilePage({
     .eq('id', user.id)
     .single()
 
+  const metadataFullName =
+    typeof user.user_metadata?.full_name === 'string'
+      ? user.user_metadata.full_name.trim()
+      : ''
+  const resolvedFullName = profile?.full_name || metadataFullName
+
   return (
     <main className="min-h-screen bg-club-cream text-club-navy p-6">
       <div className="max-w-md mx-auto space-y-6">
@@ -78,7 +84,7 @@ export default async function ProfilePage({
             </div>
             <div>
               <p className="text-xs uppercase tracking-wider text-club-text/60 font-bold">Member</p>
-              <h2 className="font-serif text-xl text-club-navy">{profile?.full_name || 'Member'}</h2>
+              <h2 className="font-serif text-xl text-club-navy">{resolvedFullName || 'Member'}</h2>
             </div>
           </div>
 
@@ -89,7 +95,7 @@ export default async function ProfilePage({
             <input
               name="fullName"
               type="text"
-              defaultValue={profile?.full_name ?? ''}
+              defaultValue={resolvedFullName}
               className="w-full bg-white border border-club-gold/40 p-3 rounded-sm font-serif text-lg"
             />
 

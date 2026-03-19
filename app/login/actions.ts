@@ -33,12 +33,17 @@ export async function signup(formData: FormData) {
 
   const email = formData.get('email') as string
   const password = formData.get('password') as string
-  const fullName = formData.get('fullName') as string
+  const fullName = ((formData.get('fullName') as string) || '').trim()
 
   // 1. Create the user
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        full_name: fullName,
+      },
+    },
   })
 
   if (authError) {
@@ -50,13 +55,14 @@ export async function signup(formData: FormData) {
   if (authData.user) {
     const { error: profileError } = await supabase
       .from('profiles')
-      .insert([
-        { 
+      .upsert(
+        {
           id: authData.user.id, 
-          full_name: fullName,
+          full_name: fullName || null,
           handicap_index: null 
-        }
-      ])
+        },
+        { onConflict: 'id' }
+      )
       
       if (profileError) {
         console.error('Profile creation error:', profileError)

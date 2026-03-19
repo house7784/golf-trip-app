@@ -14,11 +14,14 @@ export async function updateProfileDetails(formData: FormData) {
 
   const { error } = await supabase
     .from('profiles')
-    .update({
-      full_name: fullName || null,
-      handicap_index: Number.isFinite(handicapIndex) ? Math.max(0, handicapIndex) : 0,
-    })
-    .eq('id', user.id)
+    .upsert(
+      {
+        id: user.id,
+        full_name: fullName || null,
+        handicap_index: Number.isFinite(handicapIndex) ? Math.max(0, handicapIndex) : 0,
+      },
+      { onConflict: 'id' }
+    )
 
   if (error) {
     console.error('Update profile failed:', error)

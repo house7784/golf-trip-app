@@ -9,13 +9,18 @@ export async function registerMember(formData: FormData) {
 
   const email = formData.get('email') as string
   const password = formData.get('password') as string
-  const fullName = formData.get('fullName') as string
+  const fullName = ((formData.get('fullName') as string) || '').trim()
   const handicap = parseFloat(formData.get('handicap') as string) || 0
 
   // 1. Create the auth user
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        full_name: fullName,
+      },
+    },
   })
 
   if (authError) {
@@ -23,17 +28,18 @@ export async function registerMember(formData: FormData) {
     return redirect('/signup?error=Registration failed. Please try again.')
   }
 
-  // 2. Create the user profile with handicap
+  // 2. Create or update the user profile with handicap + full name
   if (authData.user) {
     const { error: profileError } = await supabase
       .from('profiles')
-      .insert([
+      .upsert(
         {
           id: authData.user.id,
-          full_name: fullName,
+          full_name: fullName || null,
           handicap_index: handicap,
         },
-      ])
+        { onConflict: 'id' }
+      )
 
     if (profileError) {
       console.error('Profile creation error:', profileError)

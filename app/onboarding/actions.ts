@@ -10,13 +10,21 @@ export async function completeProfile(formData: FormData) {
   if (!user) return redirect('/login')
 
   const handicap = formData.get('handicap')
+  const metadataFullName =
+    typeof user.user_metadata?.full_name === 'string'
+      ? user.user_metadata.full_name.trim()
+      : null
 
   const { error } = await supabase
     .from('profiles')
-    .update({ 
-      handicap_index: parseFloat(handicap as string) || 0
-    })
-    .eq('id', user.id)
+    .upsert(
+      {
+        id: user.id,
+        full_name: metadataFullName || null,
+        handicap_index: parseFloat(handicap as string) || 0,
+      },
+      { onConflict: 'id' }
+    )
 
   if (error) {
     console.error('Profile Update Error:', error)
