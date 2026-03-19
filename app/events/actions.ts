@@ -1,4 +1,3 @@
-// app/events/actions.ts
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
@@ -6,45 +5,42 @@ import { redirect } from 'next/navigation'
 
 export async function createEvent(formData: FormData) {
   const supabase = await createClient()
-  
-  // 1. Get current user
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return redirect('/login')
 
   const name = formData.get('name') as string
-  const startDate = formData.get('startDate') as string
-  const endDate = formData.get('endDate') as string
+  const location = formData.get('location') as string
+  const startDate = formData.get('start_date') as string
+  const endDate = formData.get('end_date') as string
+  
+  // 1. Generate a random 6-character code
+  const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase()
 
-  // 2. Create the Event
-  const { data: event, error: eventError } = await supabase
+  // 2. Insert Event with the Code
+  const { data: event, error } = await supabase
     .from('events')
     .insert({
       name,
+      location,
       start_date: startDate,
       end_date: endDate,
-      created_by: user.id
+      invite_code: inviteCode // <--- ADD THIS
     })
     .select()
     .single()
 
-  if (eventError) {
-    console.error('Event creation failed:', eventError)
-    return redirect('/?error=Event creation failed')
+  if (error) {
+    console.error(error)
+    return
   }
 
-  // 3. Add the Creator as the "Organizer"
-  const { error: participantError } = await supabase
-    .from('event_participants')
-    .insert({
+  // 3. Add Creator as Organizer
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
+    await supabase.from('event_participants').insert({
       event_id: event.id,
       user_id: user.id,
       role: 'organizer'
     })
-
-  if (participantError) {
-    console.error('Participant link failed:', participantError)
   }
 
-  // 4. Redirect to the new "God Mode" Dashboard
   redirect(`/events/${event.id}/dashboard`)
 }

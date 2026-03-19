@@ -49,12 +49,20 @@ export default async function Home() {
           <p className="font-serif text-xl text-club-navy mb-6 italic">
             "Gentlemen, start your engines."
           </p>
-          <a 
-            href="/login" 
-            className="block w-full bg-club-navy text-white text-center py-3 px-4 rounded-sm hover:bg-opacity-90 uppercase tracking-wide text-sm font-semibold transition-all"
-          >
-            Member Login
-          </a>
+          <div className="space-y-3">
+            <a 
+              href="/login" 
+              className="block w-full bg-club-navy text-white text-center py-3 px-4 rounded-sm hover:bg-opacity-90 uppercase tracking-wide text-sm font-semibold transition-all"
+            >
+              Member Login
+            </a>
+            <a
+              href="/signup"
+              className="block w-full bg-transparent border-2 border-club-gold text-club-navy text-center py-3 px-4 rounded-sm hover:bg-club-gold transition-all uppercase tracking-wide text-sm font-semibold"
+            >
+              New Member Sign Up
+            </a>
+          </div>
         </div>
       </main>
     )
