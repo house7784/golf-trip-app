@@ -121,7 +121,7 @@ export default function SlotAssignment({ teeTimeId, slotIndex, player, players, 
               {availablePlayers.length > 0 ? (
                   availablePlayers.map((p: any) => (
                   <option key={p.profiles.id} value={p.profiles.id}>
-                    {p.profiles.full_name || p.profiles.email.split('@')[0]} • {teamNameById[p.team_id] || 'No Team'}
+                    {p.profiles.full_name || 'Golfer'} • {teamNameById[p.team_id] || 'No Team'}
                   </option>
                   ))
               ) : (

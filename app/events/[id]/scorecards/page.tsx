@@ -3,7 +3,7 @@ import { ChevronLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 
 function getDisplayName(profile?: { full_name?: string | null; email?: string | null } | null) {
-  return profile?.full_name || profile?.email?.split('@')[0] || 'Golfer'
+  return profile?.full_name || 'Golfer'
 }
 
 function totalScore(holeScores: Record<string, number> | null | undefined) {

@@ -257,14 +257,14 @@ export default async function TeeTimesPage({
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${player ? 'bg-club-navy text-white' : 'bg-gray-200 text-gray-400'}`}>
                         {player 
-                            ? (player.full_name ? player.full_name[0].toUpperCase() : player.email[0].toUpperCase()) 
+                            ? (player.full_name ? player.full_name[0].toUpperCase() : '?') 
                             : <User size={14} />
                         }
                       </div>
                       <div className="flex flex-col">
                         <span className={`text-sm font-bold ${player ? 'text-gray-900' : 'text-gray-400'}`}>
                           {player 
-                            ? (player.full_name || player.email.split('@')[0]) 
+                            ? (player.full_name || 'Golfer') 
                             : 'Open Slot'
                           }
                         </span>

@@ -18,7 +18,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ id: stri
   // 2. Fetch Participants
   const { data: participants } = await supabase
     .from('event_participants')
-    .select('*, profiles:user_id(full_name, id, email)')
+        .select('*, profiles:user_id(full_name, id)')
     .eq('event_id', id)
     .order('created_at', { ascending: true })
 
@@ -49,7 +49,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ id: stri
                 )}
                 
                 <span className={`font-serif text-sm ${isCaptain ? 'font-bold text-club-navy' : 'text-club-navy'}`}>
-                    {p.profiles?.full_name || p.profiles?.email?.split('@')[0] || 'Unknown'}
+                    {p.profiles?.full_name || 'Unknown'}
                 </span>
             </div>
         </div>

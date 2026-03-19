@@ -80,7 +80,7 @@ export default async function ScorecardPage({
 
   const { data: participants } = await supabase
     .from('event_participants')
-    .select('user_id, team_id, profiles:user_id(full_name, email)')
+    .select('user_id, team_id, profiles:user_id(full_name)')
     .eq('event_id', id)
 
   const participantById = new Map<string, any>()
@@ -126,7 +126,6 @@ export default async function ScorecardPage({
       id: playerId,
       name:
         participantById.get(playerId)?.profiles?.full_name ||
-        participantById.get(playerId)?.profiles?.email?.split('@')[0] ||
         'Golfer',
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -139,7 +138,6 @@ export default async function ScorecardPage({
   const selectedPlayerName =
     editablePlayers.find((entry) => entry.id === selectedPlayerId)?.name ||
     participantById.get(selectedPlayerId)?.profiles?.full_name ||
-    participantById.get(selectedPlayerId)?.profiles?.email?.split('@')[0] ||
     'Golfer'
 
   const canEditSelected = isOrganizer || !scoringLocked

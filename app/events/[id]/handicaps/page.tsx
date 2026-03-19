@@ -96,7 +96,7 @@ export default async function EventHandicapsPage({
 
           <div className="space-y-3">
             {(participants || []).map((row: any) => {
-              const displayName = row.profiles?.full_name || row.profiles?.email?.split('@')[0] || 'Golfer'
+              const displayName = row.profiles?.full_name || 'Golfer'
               return (
                 <form key={row.id} action={updateParticipantEventHandicap} className="p-3 rounded-lg border border-gray-100 bg-gray-50 flex flex-col md:flex-row md:items-center gap-3">
                   <input type="hidden" name="eventId" value={id} />
