@@ -24,6 +24,26 @@ export async function createEvent(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return redirect('/login')
 
+  // Ensure a profile row exists for FK/RLS policies that depend on profiles.id.
+  const metadataFullName =
+    typeof user.user_metadata?.full_name === 'string'
+      ? user.user_metadata.full_name.trim()
+      : null
+  const { error: profileEnsureError } = await supabase
+    .from('profiles')
+    .upsert(
+      {
+        id: user.id,
+        full_name: metadataFullName || null,
+      },
+      { onConflict: 'id' }
+    )
+
+  if (profileEnsureError) {
+    console.error(profileEnsureError)
+    return redirect('/events/create?error=Could not prepare profile for event creation.')
+  }
+
   const name = ((formData.get('name') as string) || '').trim()
   const location = ((formData.get('location') as string) || '').trim()
   const startDate = ((formData.get('start_date') as string) || (formData.get('startDate') as string) || '').trim()
@@ -52,7 +72,8 @@ export async function createEvent(formData: FormData) {
 
   if (error) {
     console.error(error)
-    return redirect('/events/create?error=Could not create event. Please try again.')
+    const details = encodeURIComponent(error.message || 'Unknown error')
+    return redirect(`/events/create?error=Could not create event: ${details}`)
   }
 
   // 3. Add Creator as Organizer
