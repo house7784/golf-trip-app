@@ -57,7 +57,10 @@ export async function createEvent(formData: FormData) {
   const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase()
 
   // 2. Insert Event with the Code
-  const { data: event, error } = await supabase
+  // Some deployments may not have events.location yet.
+  let event: any = null
+
+  const insertWithLocation = await supabase
     .from('events')
     .insert({
       name,
@@ -70,10 +73,33 @@ export async function createEvent(formData: FormData) {
     .select()
     .single()
 
-  if (error) {
-    console.error(error)
-    const details = encodeURIComponent(error.message || 'Unknown error')
-    return redirect(`/events/create?error=Could not create event: ${details}`)
+  if (insertWithLocation.error?.message?.includes("Could not find the 'location' column")) {
+    const fallbackInsert = await supabase
+      .from('events')
+      .insert({
+        name,
+        start_date: startDate,
+        end_date: endDate,
+        invite_code: inviteCode,
+        created_by: user.id,
+      })
+      .select()
+      .single()
+
+    event = fallbackInsert.data
+
+    if (fallbackInsert.error) {
+      console.error(fallbackInsert.error)
+      const details = encodeURIComponent(fallbackInsert.error.message || 'Unknown error')
+      return redirect(`/events/create?error=Could not create event: ${details}`)
+    }
+  } else {
+    event = insertWithLocation.data
+    if (insertWithLocation.error) {
+      console.error(insertWithLocation.error)
+      const details = encodeURIComponent(insertWithLocation.error.message || 'Unknown error')
+      return redirect(`/events/create?error=Could not create event: ${details}`)
+    }
   }
 
   // 3. Add Creator as Organizer
