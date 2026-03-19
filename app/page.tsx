@@ -1,11 +1,19 @@
 // app/page.tsx
 import { createClient } from '@/utils/supabase/server'
+import { redirect } from 'next/navigation'
 import { Trophy, User, LogOut, Calendar, Activity, Crown, ArrowRight } from 'lucide-react'
 import { signOut } from '@/app/login/actions'
+import JoinEventPanel from '@/app/events/JoinEventPanel'
 import Link from 'next/link'
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<{ join?: string }>
+}) {
   const supabase = await createClient()
+  const query = await searchParams
+  const joinStatus = query?.join
   
   // 1. Check if the user is logged in
   const { data: { user } } = await supabase.auth.getUser()
@@ -17,6 +25,10 @@ export default async function Home() {
   if (user) {
     const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
     profile = data
+
+    if (profile?.handicap_index === null || profile?.handicap_index === undefined) {
+      redirect('/onboarding')
+    }
 
     // 3. Fetch events they are ORGANIZING
     const { data: participation } = await supabase
@@ -78,11 +90,16 @@ export default async function Home() {
       <nav className="bg-club-navy text-white p-4 sticky top-0 z-50 shadow-md">
         <div className="flex justify-between items-center max-w-md mx-auto">
           <h1 className="font-serif text-lg tracking-wide text-club-gold">The Invitational</h1>
-          <form action={signOut}>
-            <button className="text-white/60 hover:text-white transition-colors">
-              <LogOut size={20} />
-            </button>
-          </form>
+          <div className="flex items-center gap-3">
+            <Link href="/profile" className="text-white/70 hover:text-white transition-colors" title="Profile">
+              <User size={20} />
+            </Link>
+            <form action={signOut}>
+              <button className="text-white/60 hover:text-white transition-colors" title="Sign Out">
+                <LogOut size={20} />
+              </button>
+            </form>
+          </div>
         </div>
       </nav>
 
@@ -137,6 +154,13 @@ export default async function Home() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 gap-4">
+          <JoinEventPanel joinStatus={joinStatus} returnTo="/" />
+
+          <Link href="/events" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
+            <span className="font-bold uppercase tracking-wider text-sm">My Events</span>
+            <Calendar className="text-club-navy/50" />
+          </Link>
+
            {/* Link to Create NEW Event */}
           <Link href="/events/create" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
             <span className="font-bold uppercase tracking-wider text-sm">Create New Event</span>
@@ -146,6 +170,11 @@ export default async function Home() {
           <Link href="/scorecard" className="flex items-center justify-between bg-club-navy text-white p-4 rounded-sm shadow-lg hover:bg-club-navy/90 transition-all">
             <span className="font-bold uppercase tracking-wider text-sm">Enter Score</span>
             <Activity className="text-club-gold" />
+          </Link>
+
+          <Link href="/profile" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
+            <span className="font-bold uppercase tracking-wider text-sm">Edit Profile</span>
+            <User className="text-club-navy/50" />
           </Link>
           
           <button className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">

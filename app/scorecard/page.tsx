@@ -16,7 +16,7 @@ export default async function ScorecardPage() {
     <main className="min-h-screen bg-club-cream text-club-navy p-6">
       {/* Header */}
       <div className="max-w-md mx-auto mb-6 flex items-center gap-4">
-        <Link href="/" className="bg-white p-2 rounded-sm border border-club-navy/10 shadow-sm">
+        <Link href="/" className="bg-white text-club-navy p-2 rounded-sm border border-club-navy/10 shadow-sm">
           <ChevronLeft size={20} />
         </Link>
         <h1 className="font-serif text-2xl text-club-navy">Post Score</h1>

@@ -2,18 +2,29 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import TrashTalk from './chat/TrashTalk' 
+import { User } from 'lucide-react'
 
 export default async function EventLayout({
   children,
   params,
 }: {
   children: React.ReactNode
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) redirect('/login')
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('handicap_index')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.handicap_index === null || profile?.handicap_index === undefined) {
+    redirect('/onboarding')
+  }
 
   // We pass the user to the chat so it knows who "You" are
   const currentUser = { id: user.id, email: user.email }
@@ -29,9 +40,12 @@ export default async function EventLayout({
             <Link href="/events" className="font-serif font-bold text-xl tracking-wide text-club-gold">
               GOLF TRIP
             </Link>
-            <div className="space-x-6 text-sm font-bold uppercase tracking-widest">
-                <Link href={`/events/${id}/tee-times`} className="hover:text-club-gold transition">Tee Times</Link>
-                <Link href={`/events/${id}/leaderboard`} className="hover:text-club-gold transition text-gray-500 cursor-not-allowed" title="Coming Soon">Leaderboard</Link>
+            <div className="flex items-center gap-6 text-sm font-bold uppercase tracking-widest">
+              <Link href={`/events/${id}/tee-times`} className="hover:text-club-gold transition">Tee Times</Link>
+              <Link href={`/events/${id}/dashboard#leaderboards`} className="hover:text-club-gold transition">Leaderboard</Link>
+              <Link href="/profile" className="text-white/70 hover:text-white transition-colors" title="Profile">
+                <User size={18} />
+              </Link>
             </div>
         </div>
       </nav>

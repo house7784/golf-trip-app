@@ -14,7 +14,7 @@ export async function completeProfile(formData: FormData) {
   const { error } = await supabase
     .from('profiles')
     .update({ 
-      handicap: parseFloat(handicap as string) || 0
+      handicap_index: parseFloat(handicap as string) || 0
     })
     .eq('id', user.id)
 
@@ -24,5 +24,5 @@ export async function completeProfile(formData: FormData) {
   }
 
   // Success! Send them to the dashboard
-  redirect('/events')
+  redirect('/')
 }

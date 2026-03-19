@@ -3,6 +3,14 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 
+function sameSideSlots(slotNumber: number) {
+  return slotNumber <= 2 ? [1, 2] : [3, 4]
+}
+
+function oppositeSideSlots(slotNumber: number) {
+  return slotNumber <= 2 ? [3, 4] : [1, 2]
+}
+
 export async function createTeeTime(formData: FormData) {
   const supabase = await createClient()
   const roundId = formData.get('roundId') as string
@@ -53,6 +61,100 @@ export async function assignToPairing(formData: FormData) {
 
   const slotNumber = parseInt(slotIndex as string) + 1
   const finalPlayerId = playerId === 'remove' ? null : playerId
+
+  if (finalPlayerId) {
+    const { data: teeTime } = await supabase
+      .from('tee_times')
+      .select('round_id')
+      .eq('id', teeTimeId)
+      .single()
+
+    if (!teeTime?.round_id) return
+
+    const { data: round } = await supabase
+      .from('rounds')
+      .select('event_id')
+      .eq('id', teeTime.round_id)
+      .single()
+
+    if (!round?.event_id) return
+
+    const { data: teams } = await supabase
+      .from('teams')
+      .select('id')
+      .eq('event_id', round.event_id)
+
+    const enforceTeamPairing = (teams?.length || 0) >= 2
+
+    if (enforceTeamPairing) {
+      const { data: pairings } = await supabase
+        .from('pairings')
+        .select('slot_number, player_id')
+        .eq('tee_time_id', teeTimeId)
+
+      const proposedBySlot = new Map<number, string | null>()
+      ;(pairings || []).forEach((pairing: any) => {
+        proposedBySlot.set(pairing.slot_number, pairing.player_id)
+      })
+      proposedBySlot.set(slotNumber, finalPlayerId)
+
+      const involvedIds = Array.from(proposedBySlot.values()).filter(Boolean) as string[]
+      const uniqueIds = Array.from(new Set(involvedIds))
+
+      const { data: participants } = await supabase
+        .from('event_participants')
+        .select('user_id, team_id')
+        .eq('event_id', round.event_id)
+        .in('user_id', uniqueIds)
+
+      const teamByUser = new Map<string, string | null>()
+      ;(participants || []).forEach((participant: any) => {
+        teamByUser.set(participant.user_id, participant.team_id)
+      })
+
+      const candidateTeam = teamByUser.get(finalPlayerId)
+      if (!candidateTeam) {
+        console.error('Assign blocked: selected player has no team for this event')
+        return
+      }
+
+      const sideTeams = Array.from(
+        new Set(
+          sameSideSlots(slotNumber)
+            .filter((slot) => slot !== slotNumber)
+            .map((slot) => proposedBySlot.get(slot))
+            .filter(Boolean)
+            .map((userId) => teamByUser.get(userId as string))
+            .filter(Boolean)
+        )
+      ) as string[]
+
+      const oppositeTeams = Array.from(
+        new Set(
+          oppositeSideSlots(slotNumber)
+            .map((slot) => proposedBySlot.get(slot))
+            .filter(Boolean)
+            .map((userId) => teamByUser.get(userId as string))
+            .filter(Boolean)
+        )
+      ) as string[]
+
+      if (sideTeams.length > 1) {
+        console.error('Assign blocked: side pairing already contains mixed teams')
+        return
+      }
+
+      if (sideTeams.length === 1 && sideTeams[0] !== candidateTeam) {
+        console.error('Assign blocked: pairings must be same-team on each side')
+        return
+      }
+
+      if (sideTeams.length === 0 && oppositeTeams.length === 1 && oppositeTeams[0] === candidateTeam) {
+        console.error('Assign blocked: each tee time should contain one pairing from each team')
+        return
+      }
+    }
+  }
 
   // --- NEW LOGIC: UPSERT (No "Slot Missing" check needed) ---
   const { error } = await supabase
