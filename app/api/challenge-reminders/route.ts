@@ -3,9 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
 
 export async function GET(request: Request) {
-  // Verify this was called by the cron runner (set CRON_SECRET in env)
+  // If CRON_SECRET is unset, reminders are disabled.
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ disabled: true, reason: 'CRON_SECRET not set' }, { status: 200 })
+  }
+
+  // Verify this was called by the cron runner.
   const authHeader = request.headers.get('authorization')
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
