@@ -166,7 +166,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-slide-in-right border-l-4 border-club-gold"
+            className="w-full max-w-md bg-navy h-full shadow-2xl flex flex-col animate-slide-in-right border-l-4 border-club-gold"
           >
             
             {/* Header */}
