@@ -74,6 +74,32 @@ export async function signup(formData: FormData) {
   redirect('/')
 }
 
+export async function forgotPassword(formData: FormData) {
+  const supabase = await createClient()
+
+  const email = (formData.get('email') as string | null)?.trim() || ''
+  if (!email) {
+    redirect('/login?error=Enter your email first')
+  }
+
+  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  const fallbackSiteUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000'
+  const siteUrl = configuredSiteUrl || fallbackSiteUrl
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${siteUrl}/auth/confirm?next=/login/reset-password`,
+  })
+
+  if (error) {
+    console.error(error)
+    redirect('/login?error=Could not send reset email')
+  }
+
+  redirect('/login?success=Password reset link sent')
+}
+
 export async function signOut() {
   const supabase = await createClient()
   await supabase.auth.signOut()

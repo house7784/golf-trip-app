@@ -1,8 +1,16 @@
 // app/login/page.tsx
-import { login, signup } from '@/app/login/actions'
+import { forgotPassword, login, signup } from '@/app/login/actions'
 import { Trophy } from 'lucide-react'
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; success?: string }>
+}) {
+  const params = await searchParams
+  const error = params?.error ? decodeURIComponent(params.error) : ''
+  const success = params?.success ? decodeURIComponent(params.success) : ''
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-club-cream text-club-navy">
       
@@ -19,6 +27,17 @@ export default function LoginPage() {
 
       {/* Login Form */}
       <form className="w-full max-w-sm bg-club-paper p-8 rounded-sm shadow-xl border-t-4 border-club-gold space-y-6">
+        {error && (
+          <div className="rounded-sm border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-xs font-bold uppercase tracking-wide">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="rounded-sm border border-green-200 bg-green-50 text-green-700 px-3 py-2 text-xs font-bold uppercase tracking-wide">
+            {success}
+          </div>
+        )}
         
         <div className="space-y-2">
           <label className="block text-xs uppercase tracking-wider font-bold text-club-text/60">
@@ -72,6 +91,14 @@ export default function LoginPage() {
             className="w-full bg-transparent border border-club-navy text-club-navy py-3 px-4 rounded-sm hover:bg-club-navy hover:text-white uppercase tracking-wide text-xs font-bold transition-all"
           >
             New Member Registration
+          </button>
+
+          <button
+            formAction={forgotPassword as any}
+            formNoValidate
+            className="w-full text-center text-xs font-bold uppercase tracking-wide text-club-green hover:text-club-navy transition-colors"
+          >
+            Forgot Password?
           </button>
         </div>
 

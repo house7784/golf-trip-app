@@ -99,6 +99,17 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
     return () => cancelAnimationFrame(frame)
   }, [messages, isOpen])
 
+  useEffect(() => {
+    if (!isOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isOpen])
+
   const handleOpen = () => {
     setIsOpen(true)
     setUnreadCount(0)
@@ -192,15 +203,15 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex justify-end bg-black/60 backdrop-blur-sm"
           onClick={() => setIsOpen(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-navy h-full shadow-2xl flex flex-col animate-slide-in-right border-l-4 border-club-gold"
+            className="w-full max-w-md bg-navy h-full shadow-2xl flex flex-col animate-slide-in-right border-l-4 border-club-gold overflow-hidden"
           >
             {/* Header */}
-            <div className="bg-club-navy p-4 flex justify-between items-center text-white border-b border-white/10">
+            <div className="bg-club-navy p-4 flex justify-between items-center text-white border-b border-white/10 sticky top-0 z-10">
               <div>
                 <h2 className="font-serif text-xl font-bold tracking-wide">Trash Talk</h2>
                 <p className="text-xs text-club-gold font-bold uppercase tracking-wider">Live Chat</p>
