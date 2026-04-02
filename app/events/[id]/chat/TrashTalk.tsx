@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { MessageCircle, X, Send } from 'lucide-react'
@@ -32,6 +32,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
   const [newMessage, setNewMessage] = useState('')
   const [unreadCount, setUnreadCount] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
   const seenMessageIdsRef = useRef<Set<string>>(new Set())
   const [supabase] = useState(() => createClient())
 
@@ -73,17 +74,13 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `event_id=eq.${eventId}` },
-        () => {
-          loadMessages()
-        }
+        () => { loadMessages() }
       )
       .subscribe()
 
     let pollInterval: ReturnType<typeof setInterval> | undefined
     if (isOpen) {
-      pollInterval = setInterval(() => {
-        loadMessages()
-      }, 2500)
+      pollInterval = setInterval(() => { loadMessages() }, 2500)
     }
 
     return () => {
@@ -94,9 +91,11 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
   }, [currentUser.id, eventId, isOpen, supabase])
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+    if (!isOpen) return
+    const frame = requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(frame)
   }, [messages, isOpen])
 
   const handleOpen = () => {
@@ -107,23 +106,29 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim()) return
-    
+
     const tempMsg = {
-        id: `temp-${Date.now()}`,
-        content: newMessage,
-        user_id: currentUser.id,
-        created_at: new Date().toISOString(),
-        profiles: { email: currentUser.email }
+      id: `temp-${Date.now()}`,
+      content: newMessage,
+      user_id: currentUser.id,
+      created_at: new Date().toISOString(),
+      profiles: { email: currentUser.email }
     }
     setMessages((prev) => [...prev, tempMsg])
     const msgToSend = newMessage
     setNewMessage('')
-    
+
     await sendMessage(eventId, msgToSend)
   }
 
   const getName = (profile?: { full_name?: string | null; email?: string | null } | null) => {
     return profile?.full_name || 'Golfer'
+  }
+
+  const formatTime = (value: string) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   }
 
   const trigger =
@@ -160,15 +165,14 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
       {trigger}
 
       {isOpen && (
-        <div 
-            className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm"
-            onClick={() => setIsOpen(false)}
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm"
+          onClick={() => setIsOpen(false)}
         >
-          <div 
+          <div
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md bg-navy h-full shadow-2xl flex flex-col animate-slide-in-right border-l-4 border-club-gold"
           >
-            
             {/* Header */}
             <div className="bg-club-navy p-4 flex justify-between items-center text-white border-b border-white/10">
               <div>
@@ -184,25 +188,29 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-100">
               {messages.map((msg) => {
                 const isMe = msg.user_id === currentUser.id
+                const senderLabel = isMe ? 'You' : getName(msg.profiles)
+                const sentAt = formatTime(msg.created_at)
                 return (
                   <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`
+                    <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
+                      <div className={`text-[10px] leading-tight ${isMe ? 'text-right' : 'text-left'} text-club-navy/70`}>
+                        <p className="font-bold uppercase tracking-wider">{senderLabel}</p>
+                        {sentAt && <p>{sentAt}</p>}
+                      </div>
+                      <div className={`
                         max-w-[80%] rounded-2xl p-4 shadow-sm text-sm font-medium
-                        ${isMe 
-                            ? 'bg-club-navy text-black rounded-br-none' 
-                            : 'bg-black text-club-navy border border-gray-200 rounded-bl-none'
+                        ${isMe
+                          ? 'bg-club-navy text-black rounded-br-none'
+                          : 'bg-black text-club-navy border border-gray-200 rounded-bl-none'
                         }
-                    `}>
-                      {!isMe && (
-                        <p className="text-[10px] font-bold text-club-gold uppercase mb-1 tracking-wider">
-                          {getName(msg.profiles)}
-                        </p>
-                      )}
-                      <p className={`leading-relaxed ${isMe ? 'text-black' : 'text-club-navy'}`}>{msg.content}</p>
+                      `}>
+                        <p className={`leading-relaxed ${isMe ? 'text-black' : 'text-club-navy'}`}>{msg.content}</p>
+                      </div>
                     </div>
                   </div>
                 )
               })}
+              <div ref={bottomRef} />
             </div>
 
             {/* Input Area */}
@@ -214,9 +222,9 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
                 className="flex-1 bg-gray-100 border border-gray-300 rounded-full px-5 py-3 text-sm focus:outline-none focus:border-club-navy focus:ring-1 focus:ring-club-navy text-club-navy placeholder:text-gray-400"
                 autoFocus
               />
-              <button 
-                type="submit" 
-                disabled={!newMessage.trim()} 
+              <button
+                type="submit"
+                disabled={!newMessage.trim()}
                 className="bg-club-navy text-white p-3 rounded-full hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50 shadow-md"
               >
                 <Send size={18} />
