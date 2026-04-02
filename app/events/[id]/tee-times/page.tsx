@@ -16,6 +16,18 @@ const formatDate = (dateStr: string) => {
   })
 }
 
+const formatTeeTime = (timeStr?: string | null) => {
+  if (!timeStr) return 'TBD'
+  const [hourRaw, minuteRaw] = timeStr.split(':')
+  const hour = Number(hourRaw)
+  const minute = Number(minuteRaw)
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return timeStr
+
+  const suffix = hour >= 12 ? 'PM' : 'AM'
+  const normalizedHour = ((hour + 11) % 12) + 1
+  return `${normalizedHour}:${String(minute).padStart(2, '0')} ${suffix}`
+}
+
 export default async function TeeTimesPage({ 
   params, 
   searchParams 
@@ -89,6 +101,7 @@ export default async function TeeTimesPage({
   const teeTimes = activeRound.tee_times || []
   const sortedTimes = teeTimes.sort((a: any, b: any) => a.time.localeCompare(b.time))
   const firstTeeTime = sortedTimes.length > 0 ? sortedTimes[0].time : null
+  const firstTeeTimeLabel = formatTeeTime(firstTeeTime)
 
   // Calculate WHO IS PLAYING
   const assignedPlayerIds = new Set()
@@ -205,7 +218,7 @@ export default async function TeeTimesPage({
             </h2>
             <p className="text-white/60 text-sm">
                 {!isStarted 
-                    ? `Scoring opens 30 mins before first tee time (${firstTeeTime || 'TBD'})` 
+                ? `Scoring opens 30 mins before first tee time (${firstTeeTimeLabel})` 
                     : 'Enter your scores hole-by-hole.'}
             </p>
         </div>
@@ -234,7 +247,7 @@ export default async function TeeTimesPage({
             <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center">
               <div className="flex items-center gap-2 text-club-navy font-bold font-serif text-xl">
                 <Clock size={18} className="text-club-gold" />
-                {tt.time}
+                {formatTeeTime(tt.time)}
               </div>
               {isOrganizer && (
                 <form action={deleteTeeTime}>
