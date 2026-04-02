@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Swords, X, UserCheck, Trophy, CheckCircle2, XCircle } from 'lucide-react'
+import { ArrowLeft, Swords, X, UserCheck, Trophy, CheckCircle2, XCircle } from 'lucide-react'
 import {
   createChallenge,
   respondToChallenge,
@@ -196,6 +197,12 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
     <div className="space-y-6 pb-16">
       {/* Header */}
       <div className="bg-club-navy text-white rounded-2xl p-6">
+        <Link
+          href={`/events/${eventId}/dashboard`}
+          className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-club-gold hover:text-white transition mb-4"
+        >
+          <ArrowLeft size={14} /> Back to Event
+        </Link>
         <div className="flex items-center gap-3">
           <Swords size={28} className="text-club-gold" />
           <div>

@@ -30,6 +30,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [newMessage, setNewMessage] = useState('')
+  const [sendError, setSendError] = useState<string | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -106,9 +107,11 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim()) return
+    setSendError(null)
 
+    const tempId = `temp-${Date.now()}`
     const tempMsg = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       content: newMessage,
       user_id: currentUser.id,
       created_at: new Date().toISOString(),
@@ -118,7 +121,23 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
     const msgToSend = newMessage
     setNewMessage('')
 
-    await sendMessage(eventId, msgToSend)
+    const result = await sendMessage(eventId, msgToSend)
+    if (result?.error) {
+      setMessages((prev) => prev.filter((message) => message.id !== tempId))
+      setSendError(`Message failed: ${result.error}`)
+      return
+    }
+
+    // Pull fresh rows to replace the optimistic temp message.
+    const { data } = await supabase
+      .from('messages')
+      .select('id, content, created_at, user_id, profiles:user_id(full_name, email)')
+      .eq('event_id', eventId)
+      .order('created_at', { ascending: true })
+
+    if (data) {
+      setMessages(data as MessageRow[])
+    }
   }
 
   const getName = (profile?: { full_name?: string | null; email?: string | null } | null) => {
@@ -230,6 +249,11 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
                 <Send size={18} />
               </button>
             </form>
+            {sendError && (
+              <div className="px-4 pb-4 text-xs font-semibold text-red-600 bg-white">
+                {sendError}
+              </div>
+            )}
           </div>
         </div>
       )}
