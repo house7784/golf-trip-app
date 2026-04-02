@@ -1,7 +1,7 @@
 // app/page.tsx
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { Trophy, User, LogOut, Calendar, Activity, Crown, ArrowRight } from 'lucide-react'
+import { Trophy, User, LogOut, Calendar, Crown, ArrowRight } from 'lucide-react'
 import { signOut } from '@/app/login/actions'
 import JoinEventPanel from '@/app/events/JoinEventPanel'
 import Link from 'next/link'
@@ -49,9 +49,6 @@ export default async function Home({
       <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-club-cream">
         <div className="mb-8 border-b-4 border-double border-club-gold pb-4">
           <h1 className="font-serif text-5xl text-club-navy tracking-tight">The Invitational</h1>
-          <p className="font-sans text-club-green uppercase tracking-widest mt-2 text-sm font-bold">
-            Est. 2026 • Myrtle Beach
-          </p>
         </div>
 
         <div className="bg-club-paper p-8 rounded-sm shadow-xl border border-club-gold/30 max-w-sm w-full">
@@ -117,14 +114,10 @@ export default async function Home({
             </div>
           </div>
           
-          <div className="mt-6 grid grid-cols-2 gap-4">
+          <div className="mt-6 grid grid-cols-1 gap-4">
             <div className="bg-white p-3 border border-club-gold/20 text-center">
               <p className="text-xs uppercase text-club-text/50 font-bold">Handicap</p>
               <p className="text-2xl font-serif text-club-navy">{profile?.handicap_index ?? '--'}</p>
-            </div>
-            <div className="bg-white p-3 border border-club-gold/20 text-center">
-              <p className="text-xs uppercase text-club-text/50 font-bold">Skin Bank</p>
-              <p className="text-2xl font-serif text-club-green">$0.00</p>
             </div>
           </div>
         </div>
@@ -165,11 +158,6 @@ export default async function Home({
           <Link href="/events/create" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">
             <span className="font-bold uppercase tracking-wider text-sm">Create New Event</span>
             <Trophy className="text-club-navy/50" />
-          </Link>
-
-          <Link href="/scorecard" className="flex items-center justify-between bg-club-navy text-white p-4 rounded-sm shadow-lg hover:bg-club-navy/90 transition-all">
-            <span className="font-bold uppercase tracking-wider text-sm">Enter Score</span>
-            <Activity className="text-club-gold" />
           </Link>
 
           <Link href="/profile" className="flex items-center justify-between bg-white border border-club-navy/20 text-club-navy p-4 rounded-sm hover:bg-club-paper transition-all">

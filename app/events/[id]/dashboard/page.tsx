@@ -7,7 +7,6 @@ import {
 	Send,
 	Edit,
 	Swords,
-	ClipboardList,
 	Users,
 	Settings,
 	Gauge
@@ -562,14 +561,6 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 					>
 						<Swords size={28} className="text-club-gold" />
 						<span className="font-bold text-xs uppercase tracking-wider">Challenges</span>
-					</Link>
-
-					<Link
-						href={`/events/${id}/dashboard#leaderboards`}
-						className="bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition"
-					>
-						<ClipboardList size={28} className="text-club-gold" />
-						<span className="font-bold text-xs uppercase tracking-wider">Standings</span>
 					</Link>
 				</div>
 
