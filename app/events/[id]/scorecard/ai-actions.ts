@@ -27,7 +27,7 @@ export async function findCourseDetails(courseName: string) {
     [
       { "number": 1, "par": 4, "hcp": 10 },
       { "number": 2, "par": 5, "hcp": 2 },
-      ... (for all 18 holes)
+      ... (for all 18 holes) holes
     ]
   `
 
@@ -47,7 +47,7 @@ export async function findCourseDetails(courseName: string) {
     return JSON.parse(cleanJson)
 
   } catch (error) {
-    console.error("OpenAI Error:", error)
+    console.error("OpenAI Error:", error) 
     return null
   }
 }
