@@ -1,7 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import TrashTalk from './chat/TrashTalk' 
 import { User } from 'lucide-react'
 
 export default async function EventLayout({
@@ -25,9 +24,6 @@ export default async function EventLayout({
   if (profile?.handicap_index === null || profile?.handicap_index === undefined) {
     redirect('/onboarding')
   }
-
-  // We pass the user to the chat so it knows who "You" are
-  const currentUser = { id: user.id, email: user.email }
 
   // Await params to avoid Next.js sync errors
   const { id } = await params
@@ -53,9 +49,6 @@ export default async function EventLayout({
       <main className="max-w-6xl mx-auto p-4 pb-24">
         {children}
       </main>
-
-      {/* THE TRASH TALK BUTTON */}
-      <TrashTalk eventId={id} currentUser={currentUser} />
       
     </div>
   )

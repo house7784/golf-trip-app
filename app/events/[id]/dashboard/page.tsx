@@ -7,11 +7,13 @@ import {
 	Send,
 	Edit,
 	Swords,
+	MessageCircle,
 	Users,
 	Settings,
 	Gauge
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
+import TrashTalk from '../chat/TrashTalk'
 import { activateLeaderboard, deactivateLeaderboard, postAnnouncement } from './actions'
 import { calculateNetTotal, clampHandicap, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 
@@ -96,6 +98,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		.single()
 
 	const { data: { user } } = await supabase.auth.getUser()
+	const currentUser = { id: user?.id || '', email: user?.email || '' }
 	const { data: participant } = await supabase
 		.from('event_participants')
 		.select('role')
@@ -562,6 +565,13 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 						<Swords size={28} className="text-club-gold" />
 						<span className="font-bold text-xs uppercase tracking-wider">Challenges</span>
 					</Link>
+
+					<TrashTalk
+						eventId={id}
+						currentUser={currentUser}
+						variant="tile"
+						icon={<MessageCircle size={28} className="text-club-gold" />}
+					/>
 				</div>
 
 				{/* 4. ORGANIZER TOOLS */}

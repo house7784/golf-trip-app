@@ -1,59 +1,104 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { MessageCircle, X, Send } from 'lucide-react'
 import { createClient } from '../../../../utils/supabase/client'
 import { sendMessage } from './actions'
 
-export default function TrashTalk({ eventId, currentUser }: any) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [messages, setMessages] = useState<any[]>([])
-  const [newMessage, setNewMessage] = useState('')
-  const [unreadCount, setUnreadCount] = useState(0) // <--- NEW: Track unread messages
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const supabase = createClient()
+type MessageRow = {
+  id: string | number
+  content: string
+  created_at: string
+  user_id: string
+  profiles?: {
+    full_name?: string | null
+    email?: string | null
+  } | null
+}
 
-  // 1. Load messages & Subscribe
+type TrashTalkProps = {
+  eventId: string
+  currentUser: {
+    id: string
+    email?: string | null
+  }
+  variant?: 'floating' | 'tile'
+  icon?: ReactNode
+}
+
+export default function TrashTalk({ eventId, currentUser, variant = 'floating', icon }: TrashTalkProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [messages, setMessages] = useState<MessageRow[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [unreadCount, setUnreadCount] = useState(0)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const seenMessageIdsRef = useRef<Set<string>>(new Set())
+  const [supabase] = useState(() => createClient())
+
   useEffect(() => {
-    const fetchMessages = async () => {
+    let isActive = true
+
+    const loadMessages = async () => {
       const { data } = await supabase
         .from('messages')
-        .select('*, profiles(email, handicap)')
+        .select('id, content, created_at, user_id, profiles:user_id(full_name, email)')
         .eq('event_id', eventId)
         .order('created_at', { ascending: true })
-      
-      if (data) setMessages(data)
+
+      if (!data || !isActive) return
+
+      const normalized = data as MessageRow[]
+      const knownIds = seenMessageIdsRef.current
+      const incomingCount = normalized.filter(
+        (message) =>
+          !knownIds.has(String(message.id)) &&
+          message.user_id !== currentUser.id
+      ).length
+
+      normalized.forEach((message) => {
+        knownIds.add(String(message.id))
+      })
+
+      setMessages(normalized)
+
+      if (!isOpen && incomingCount > 0) {
+        setUnreadCount((prev) => prev + incomingCount)
+      }
     }
 
-    fetchMessages()
+    loadMessages()
 
     const channel = supabase
-      .channel('trash_talk')
+      .channel(`trash_talk:${eventId}`)
       .on(
-        'postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `event_id=eq.${eventId}` }, 
-        (payload) => {
-          fetchMessages() // Always get the new data
-          
-          // NEW LOGIC: If chat is CLOSED and it wasn't me who sent it -> Add Red Dot
-          if (!isOpen && payload.new.user_id !== currentUser.id) {
-            setUnreadCount((prev) => prev + 1)
-          }
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `event_id=eq.${eventId}` },
+        () => {
+          loadMessages()
         }
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
-  }, [eventId, isOpen]) // <--- Added 'isOpen' dependency so the listener knows the current state
+    let pollInterval: ReturnType<typeof setInterval> | undefined
+    if (isOpen) {
+      pollInterval = setInterval(() => {
+        loadMessages()
+      }, 2500)
+    }
 
-  // Scroll to bottom
+    return () => {
+      isActive = false
+      if (pollInterval) clearInterval(pollInterval)
+      supabase.removeChannel(channel)
+    }
+  }, [currentUser.id, eventId, isOpen, supabase])
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages, isOpen])
 
-  // Clear notifications when opening
   const handleOpen = () => {
     setIsOpen(true)
     setUnreadCount(0)
@@ -63,38 +108,56 @@ export default function TrashTalk({ eventId, currentUser }: any) {
     e.preventDefault()
     if (!newMessage.trim()) return
     
-    // Optimistic UI
     const tempMsg = {
-        id: Math.random(),
+        id: `temp-${Date.now()}`,
         content: newMessage,
         user_id: currentUser.id,
         created_at: new Date().toISOString(),
         profiles: { email: currentUser.email }
     }
-    setMessages([...messages, tempMsg])
+    setMessages((prev) => [...prev, tempMsg])
     const msgToSend = newMessage
     setNewMessage('')
     
     await sendMessage(eventId, msgToSend)
   }
 
-  const getName = (email: string) => email ? email.split('@')[0] : 'Golfer'
+  const getName = (profile?: { full_name?: string | null; email?: string | null } | null) => {
+    return profile?.full_name || 'Golfer'
+  }
 
-  return (
-    <>
-      <button 
-        onClick={handleOpen} // Changed to handleOpen
+  const trigger =
+    variant === 'tile' ? (
+      <button
+        type="button"
+        onClick={handleOpen}
+        className="relative bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition"
+      >
+        {icon || <MessageCircle size={28} className="text-club-gold" />}
+        <span className="font-bold text-xs uppercase tracking-wider">Trash Talk</span>
+        {unreadCount > 0 && (
+          <div className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-bold min-w-6 h-6 px-1 flex items-center justify-center rounded-full border-2 border-white">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </div>
+        )}
+      </button>
+    ) : (
+      <button
+        onClick={handleOpen}
         className="fixed bottom-6 right-6 bg-club-gold text-club-navy p-4 rounded-full shadow-2xl hover:scale-110 transition-transform z-40 border-4 border-club-navy group relative"
       >
         <MessageCircle size={32} strokeWidth={2.5} />
-        
-        {/* --- THE RED DOT --- */}
         {unreadCount > 0 && (
-            <div className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-club-navy animate-bounce">
-                {unreadCount > 9 ? '9+' : unreadCount}
-            </div>
+          <div className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-club-navy animate-bounce">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </div>
         )}
       </button>
+    )
+
+  return (
+    <>
+      {trigger}
 
       {isOpen && (
         <div 
@@ -132,10 +195,10 @@ export default function TrashTalk({ eventId, currentUser }: any) {
                     `}>
                       {!isMe && (
                         <p className="text-[10px] font-bold text-club-gold uppercase mb-1 tracking-wider">
-                          {getName(msg.profiles?.email)}
+                          {getName(msg.profiles)}
                         </p>
                       )}
-                      <p className="leading-relaxed">{msg.content}</p>
+                      <p className={`leading-relaxed ${isMe ? 'text-white' : 'text-black'}`}>{msg.content}</p>
                     </div>
                   </div>
                 )
