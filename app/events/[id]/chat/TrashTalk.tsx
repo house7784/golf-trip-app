@@ -42,7 +42,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
 
     const loadMessages = async () => {
       const { data } = await supabase
-        .from('messages')
+        .from('chat_messages')
         .select('id, content, created_at, user_id, profiles:user_id(full_name, email)')
         .eq('event_id', eventId)
         .order('created_at', { ascending: true })
@@ -74,7 +74,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
       .channel(`trash_talk:${eventId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `event_id=eq.${eventId}` },
+        { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `event_id=eq.${eventId}` },
         () => { loadMessages() }
       )
       .subscribe()
@@ -130,7 +130,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
 
     // Pull fresh rows to replace the optimistic temp message.
     const { data, error } = await supabase
-      .from('messages')
+      .from('chat_messages')
       .select('id, content, created_at, user_id, profiles:user_id(full_name, email)')
       .eq('event_id', eventId)
       .order('created_at', { ascending: true })

@@ -8,7 +8,7 @@ export async function sendMessage(eventId: string, content: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' as const }
 
-  const { error } = await supabase.from('messages').insert({
+  const { error } = await supabase.from('chat_messages').insert({
     event_id: eventId,
     user_id: user.id,
     content: content.trim()
