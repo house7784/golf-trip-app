@@ -189,8 +189,8 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
                     <div className={`
                         max-w-[80%] rounded-2xl p-4 shadow-sm text-sm font-medium
                         ${isMe 
-                            ? 'bg-club-navy text-white rounded-br-none' 
-                            : 'bg-white text-club-navy border border-gray-200 rounded-bl-none'
+                            ? 'bg-club-navy text-black rounded-br-none' 
+                            : 'bg-black text-club-navy border border-gray-200 rounded-bl-none'
                         }
                     `}>
                       {!isMe && (
@@ -198,7 +198,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
                           {getName(msg.profiles)}
                         </p>
                       )}
-                      <p className={`leading-relaxed ${isMe ? 'text-white' : 'text-black'}`}>{msg.content}</p>
+                      <p className={`leading-relaxed ${isMe ? 'text-black' : 'text-club-navy'}`}>{msg.content}</p>
                     </div>
                   </div>
                 )
