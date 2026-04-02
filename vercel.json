@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/challenge-reminders",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
