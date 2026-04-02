@@ -129,11 +129,18 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
     }
 
     // Pull fresh rows to replace the optimistic temp message.
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .select('id, content, created_at, user_id, profiles:user_id(full_name, email)')
       .eq('event_id', eventId)
       .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('[chat] Failed to reload messages after send:', error)
+      setSendError(`Failed to reload: ${error.message}`)
+      // Keep the optimistic message visible even if reload fails
+      return
+    }
 
     if (data) {
       setMessages(data as MessageRow[])
