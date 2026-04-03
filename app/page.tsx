@@ -9,11 +9,16 @@ import Link from 'next/link'
 export default async function Home({
   searchParams,
 }: {
-  searchParams?: Promise<{ join?: string }>
+  searchParams?: Promise<{ join?: string; error?: string; error_code?: string; error_description?: string }>
 }) {
   const supabase = await createClient()
   const query = await searchParams
   const joinStatus = query?.join
+
+  if (query?.error === 'access_denied' || query?.error_code === 'otp_expired') {
+    const reason = encodeURIComponent('Reset link expired. Please request a new password reset email.')
+    redirect(`/login/reset-password?error=${reason}`)
+  }
   
   // 1. Check if the user is logged in
   const { data: { user } } = await supabase.auth.getUser()

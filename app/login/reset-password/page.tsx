@@ -11,6 +11,9 @@ function ResetPasswordContent() {
   const searchParams = useSearchParams()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [resendEmail, setResendEmail] = useState('')
+  const [resendStatus, setResendStatus] = useState('')
+  const [isResending, setIsResending] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
@@ -110,6 +113,30 @@ function ResetPasswordContent() {
     }, 900)
   }
 
+  const handleResend = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setResendStatus('')
+
+    const email = resendEmail.trim()
+    if (!email) {
+      setResendStatus('Enter your email first.')
+      return
+    }
+
+    setIsResending(true)
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login/reset-password`,
+    })
+    setIsResending(false)
+
+    if (resetError) {
+      setResendStatus(`Could not send reset email: ${resetError.message}`)
+      return
+    }
+
+    setResendStatus('New reset link sent. Check your email.')
+  }
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-club-cream text-club-navy">
       <div className="w-full max-w-sm mb-4">
@@ -135,6 +162,35 @@ function ResetPasswordContent() {
         {error && (
           <div className="rounded-sm border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-xs font-bold uppercase tracking-wide">
             {error}
+          </div>
+        )}
+
+        {!ready && (
+          <div className="rounded-sm border border-club-gold/30 bg-white px-3 py-3 space-y-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-club-navy/80">
+              Need a fresh reset link?
+            </p>
+            <form onSubmit={handleResend} className="space-y-2">
+              <input
+                type="email"
+                value={resendEmail}
+                onChange={(e) => setResendEmail(e.target.value)}
+                placeholder="member@club.com"
+                className="w-full bg-white border border-club-gold/40 p-2.5 rounded-sm text-sm focus:outline-none focus:border-club-navy transition-colors"
+                disabled={isResending}
+                required
+              />
+              <button
+                type="submit"
+                disabled={isResending}
+                className="w-full bg-club-navy text-white py-2.5 px-3 rounded-sm text-[11px] font-bold uppercase tracking-wide disabled:opacity-50"
+              >
+                {isResending ? 'Sending...' : 'Send New Reset Link'}
+              </button>
+            </form>
+            {resendStatus && (
+              <p className="text-[11px] font-semibold text-club-navy/80">{resendStatus}</p>
+            )}
           </div>
         )}
 
