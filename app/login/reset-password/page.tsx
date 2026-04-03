@@ -1,14 +1,93 @@
-import Link from 'next/link'
-import { ArrowLeft, KeyRound } from 'lucide-react'
-import { updatePassword } from './actions'
+'use client'
 
-export default async function ResetPasswordPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>
-}) {
-  const params = await searchParams
-  const error = params?.error ? decodeURIComponent(params.error) : ''
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowLeft, KeyRound } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
+
+export default function ResetPasswordPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const supabase = useMemo(() => createClient(), [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const prepareRecovery = async () => {
+      const tokenHash = searchParams.get('token_hash')
+      const type = searchParams.get('type')
+
+      if (tokenHash && type === 'recovery') {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          type: 'recovery',
+          token_hash: tokenHash,
+        })
+
+        if (verifyError) {
+          if (!cancelled) {
+            setError('Invalid or expired reset link. Please request a new one.')
+          }
+          return
+        }
+      }
+
+      const { data } = await supabase.auth.getSession()
+      if (!data.session) {
+        if (!cancelled) {
+          setError('Reset link is invalid or expired. Request a new reset email.')
+        }
+        return
+      }
+
+      if (!cancelled) {
+        setReady(true)
+      }
+    }
+
+    prepareRecovery()
+
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams, supabase])
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setIsSubmitting(true)
+    const { error: updateError } = await supabase.auth.updateUser({ password })
+    setIsSubmitting(false)
+
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
+    setSuccess('Password updated. Redirecting to login...')
+    setTimeout(() => {
+      router.push('/login?success=Password%20updated.%20Please%20sign%20in.')
+    }, 900)
+  }
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-club-cream text-club-navy">
@@ -21,7 +100,7 @@ export default async function ResetPasswordPage({
         </Link>
       </div>
 
-      <form className="w-full max-w-sm bg-club-paper p-8 rounded-sm shadow-xl border-t-4 border-club-gold space-y-6">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm bg-club-paper p-8 rounded-sm shadow-xl border-t-4 border-club-gold space-y-6">
         <div className="text-center">
           <div className="flex justify-center mb-3 text-club-gold">
             <KeyRound size={38} strokeWidth={1.75} />
@@ -38,6 +117,12 @@ export default async function ResetPasswordPage({
           </div>
         )}
 
+        {success && (
+          <div className="rounded-sm border border-green-200 bg-green-50 text-green-700 px-3 py-2 text-xs font-bold uppercase tracking-wide">
+            {success}
+          </div>
+        )}
+
         <div className="space-y-2">
           <label className="block text-xs uppercase tracking-wider font-bold text-club-text/60">
             New Password
@@ -47,8 +132,11 @@ export default async function ResetPasswordPage({
             type="password"
             required
             minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             className="w-full bg-white border border-club-gold/40 p-3 rounded-sm focus:outline-none focus:border-club-navy transition-colors"
+            disabled={!ready || isSubmitting}
           />
         </div>
 
@@ -61,16 +149,20 @@ export default async function ResetPasswordPage({
             type="password"
             required
             minLength={8}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="••••••••"
             className="w-full bg-white border border-club-gold/40 p-3 rounded-sm focus:outline-none focus:border-club-navy transition-colors"
+            disabled={!ready || isSubmitting}
           />
         </div>
 
         <button
-          formAction={updatePassword as any}
-          className="w-full bg-club-navy text-white py-3 px-4 rounded-sm hover:bg-opacity-90 uppercase tracking-wide text-xs font-bold transition-all"
+          type="submit"
+          disabled={!ready || isSubmitting}
+          className="w-full bg-club-navy text-white py-3 px-4 rounded-sm hover:bg-opacity-90 uppercase tracking-wide text-xs font-bold transition-all disabled:opacity-50"
         >
-          Update Password
+          {isSubmitting ? 'Updating...' : 'Update Password'}
         </button>
       </form>
     </main>
