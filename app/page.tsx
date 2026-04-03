@@ -9,11 +9,20 @@ import Link from 'next/link'
 export default async function Home({
   searchParams,
 }: {
-  searchParams?: Promise<{ join?: string; error?: string; error_code?: string; error_description?: string }>
+  searchParams?: Promise<{ join?: string; error?: string; error_code?: string; error_description?: string; code?: string }>
 }) {
   const supabase = await createClient()
   const query = await searchParams
   const joinStatus = query?.join
+
+  if (query?.code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(query.code)
+    if (error) {
+      const reason = encodeURIComponent('Invalid or expired reset link. Please request a new one.')
+      redirect(`/login/reset-password?error=${reason}`)
+    }
+    redirect('/login/reset-password')
+  }
 
   if (query?.error === 'access_denied' || query?.error_code === 'otp_expired') {
     const reason = encodeURIComponent('Reset link expired. Please request a new password reset email.')
