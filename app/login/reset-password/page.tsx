@@ -141,12 +141,22 @@ function ResetPasswordContent() {
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/login/reset-password`,
     })
-    setIsResending(false)
 
     if (resetError) {
-      setResendStatus(`Could not send reset email: ${resetError.message}`)
+      // Fallback for strict redirect allow-list projects.
+      const { error: fallbackError } = await supabase.auth.resetPasswordForEmail(email)
+      setIsResending(false)
+
+      if (fallbackError) {
+        setResendStatus(`Could not send reset email: ${fallbackError.message}`)
+        return
+      }
+
+      setResendStatus('New reset link sent. Check your email.')
       return
     }
+
+    setIsResending(false)
 
     setResendStatus('New reset link sent. Check your email.')
   }
