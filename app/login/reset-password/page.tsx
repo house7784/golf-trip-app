@@ -25,6 +25,20 @@ function ResetPasswordContent() {
     let cancelled = false
 
     const prepareRecovery = async () => {
+      const code = searchParams.get('code')
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+        if (exchangeError) {
+          if (!cancelled) {
+            setError('Invalid or expired reset link. Please request a new one.')
+          }
+          return
+        }
+
+        // Remove query params after successful exchange.
+        window.history.replaceState(null, '', '/login/reset-password')
+      }
+
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
       const hashAccessToken = hashParams.get('access_token')
       const hashRefreshToken = hashParams.get('refresh_token')

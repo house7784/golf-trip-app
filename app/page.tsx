@@ -16,12 +16,7 @@ export default async function Home({
   const joinStatus = query?.join
 
   if (query?.code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(query.code)
-    if (error) {
-      const reason = encodeURIComponent('Invalid or expired reset link. Please request a new one.')
-      redirect(`/login/reset-password?error=${reason}`)
-    }
-    redirect('/login/reset-password')
+    redirect(`/login/reset-password?code=${encodeURIComponent(query.code)}`)
   }
 
   if (query?.error === 'access_denied' || query?.error_code === 'otp_expired') {
