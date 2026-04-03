@@ -22,6 +22,27 @@ function ResetPasswordContent() {
     let cancelled = false
 
     const prepareRecovery = async () => {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const hashAccessToken = hashParams.get('access_token')
+      const hashRefreshToken = hashParams.get('refresh_token')
+
+      if (hashAccessToken && hashRefreshToken) {
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: hashAccessToken,
+          refresh_token: hashRefreshToken,
+        })
+
+        if (setSessionError) {
+          if (!cancelled) {
+            setError('Invalid or expired reset link. Please request a new one.')
+          }
+          return
+        }
+
+        // Clean up URL hash after session is established.
+        window.history.replaceState(null, '', '/login/reset-password')
+      }
+
       const tokenHash = searchParams.get('token_hash')
       const type = searchParams.get('type')
 
