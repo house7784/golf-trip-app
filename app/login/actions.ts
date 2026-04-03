@@ -86,15 +86,20 @@ export async function forgotPassword(formData: FormData) {
   const fallbackSiteUrl = process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : 'http://localhost:3000'
-  const siteUrl = configuredSiteUrl || fallbackSiteUrl
+  const siteUrl = (configuredSiteUrl || fallbackSiteUrl).replace(/\/$/, '')
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+  // Primary attempt: send users directly to the dedicated reset page.
+  const { error: primaryError } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${siteUrl}/login/reset-password`,
   })
 
-  if (error) {
-    console.error(error)
-    redirect('/login?error=Could not send reset email')
+  // Fallback: some Supabase projects reject redirectTo if allow-list is strict.
+  if (primaryError) {
+    console.error('resetPasswordForEmail primary error:', primaryError)
+    const { error: fallbackError } = await supabase.auth.resetPasswordForEmail(email)
+    if (fallbackError) {
+      console.error('resetPasswordForEmail fallback error:', fallbackError)
+    }
   }
 
   redirect('/login?success=Password reset link sent')
