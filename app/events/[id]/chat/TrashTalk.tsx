@@ -259,15 +259,15 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-[100] flex justify-end bg-black/60 backdrop-blur-sm"
+          className="fixed inset-x-0 bottom-0 top-16 z-[1200] flex justify-end bg-black/45 backdrop-blur-sm"
           onClick={handleClose}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-navy h-full shadow-2xl flex flex-col animate-slide-in-right border-l-4 border-club-gold overflow-hidden"
+            className="relative flex h-full w-full max-w-md flex-col overflow-hidden rounded-tl-3xl border-l-4 border-t-4 border-club-gold bg-club-navy shadow-2xl animate-slide-in-right"
           >
             {/* Header */}
-            <div className="bg-club-navy p-4 flex justify-between items-center text-white border-b border-white/10 sticky top-0 z-10">
+            <div className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-club-navy px-5 py-4 text-white">
               <div>
                 <h2 className="font-serif text-xl font-bold tracking-wide">Trash Talk</h2>
                 <p className="text-xs text-club-gold font-bold uppercase tracking-wider">Live Chat</p>
@@ -282,7 +282,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
                   e.stopPropagation()
                   handleClose()
                 }}
-                className="hover:bg-white/10 p-2 rounded-full transition text-club-gold"
+                className="relative z-30 hover:bg-white/10 p-2 rounded-full transition text-club-gold touch-manipulation"
                 aria-label="Close chat"
               >
                 <X size={24} />
@@ -330,7 +330,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
               <button
                 type="submit"
                 disabled={!newMessage.trim()}
-                className="bg-club-navy text-white p-3 rounded-full hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50 shadow-md"
+                className="bg-club-navy text-Black p-3 rounded-full hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50 shadow-md"
               >
                 <Send size={18} />
               </button>

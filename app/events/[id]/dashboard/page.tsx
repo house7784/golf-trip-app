@@ -525,9 +525,20 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
 				{/* 4. ORGANIZER TOOLS */}
 				{isOrganizer && (
-					<div className="mt-8 pt-8 border-t border-club-navy/10">
+					<details className="group mt-8 pt-8 border-t border-club-navy/10" open>
+						<summary className="mb-4 list-none cursor-pointer select-none">
+							<div className="flex items-center justify-between">
+								<h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Organizer Tools</h3>
+								<div className="flex items-center gap-2">
+									<span className="text-[10px] font-bold uppercase tracking-wider text-club-navy/60">Hide/Show</span>
+									<span className="relative inline-flex h-6 w-11 items-center rounded-full bg-club-navy/25 transition group-open:bg-club-green">
+										<span className="inline-block h-5 w-5 transform rounded-full bg-white transition translate-x-1 group-open:translate-x-5" />
+									</span>
+								</div>
+							</div>
+						</summary>
+
 						<div className="flex items-center justify-between mb-4">
-							<h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Organizer Tools</h3>
 							<div className="flex items-center gap-2">
 								{leaderboardActive ? (
 									<form action={deactivateLeaderboard}>
@@ -561,7 +572,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 								<span className="text-[10px] font-bold text-gray-600">Handicaps</span>
 							</Link>
 						</div>
-					</div>
+					</details>
 				)}
 
 				{/* 4. LEADERBOARD (collapsible, at bottom) */}
