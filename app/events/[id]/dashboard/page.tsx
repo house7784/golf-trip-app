@@ -14,8 +14,10 @@ import {
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
 import TrashTalk from '../chat/TrashTalk'
+import CollapsibleLeaderboard from './CollapsibleLeaderboard'
 import { activateLeaderboard, deactivateLeaderboard, postAnnouncement } from './actions'
 import { calculateNetTotal, clampHandicap, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
+import { getDefaultLeaderboardGroupSize, normalizeLeaderboardGroupSize } from '@/lib/game_modes'
 
 const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
 
@@ -39,7 +41,8 @@ type TeamRow = {
 type RoundRow = {
 	id: string
 	date: string
-	course_data?: { holes?: CourseHole[] } | null
+	mode_key?: string | null
+	course_data?: { holes?: CourseHole[]; leaderboard_group_size?: number } | null
 }
 
 type ScoreRow = {
@@ -120,7 +123,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
 	const { data: roundsData } = await supabase
 		.from('rounds')
-		.select('id, date, course_data')
+		.select('id, date, mode_key, course_data')
 		.eq('event_id', id)
 
 	const rounds: RoundRow[] = (roundsData as RoundRow[] | null) || []
@@ -239,6 +242,65 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 				memberIds: [p.user_id],
 			}))
 
+	const teamEntries = teams
+		.map((team) => {
+			const members = participants.filter((p) => p.team_id === team.id)
+			return {
+				key: team.id,
+				label: team.name,
+				memberNames: members.map((m) => getDisplayName(m.profiles)),
+				memberIds: members.map((m) => m.user_id),
+			}
+		})
+
+	const overallEntries = hasTeams ? teamEntries : entries
+
+	const buildPairingEntries = async (roundId: string, groupSize: number) => {
+		if (groupSize === 1) return entries
+		const { data: teeTimesData } = await supabase
+			.from('tee_times')
+			.select('id, pairings(slot_number, player_id, profiles:player_id(full_name, email))')
+			.eq('round_id', roundId)
+
+		const teeTimes = (teeTimesData as TeeTimeRow[] | null) || []
+		const groupedEntries: Array<{ key: string; label: string; memberNames: string[]; memberIds: string[] }> = []
+		let groupNumber = 1
+
+		teeTimes.forEach((teeTime) => {
+			const sortedPairings = [...(teeTime.pairings || [])].sort((a, b) => a.slot_number - b.slot_number)
+			const players = sortedPairings.filter((p) => p.player_id)
+
+			if (groupSize === 4) {
+				if (players.length > 0) {
+					groupedEntries.push({
+						key: `${teeTime.id}-group-1`,
+						label: `Group ${groupNumber++}`,
+						memberNames: players.map((p) => getDisplayName(p.profiles)),
+						memberIds: players.map((p) => p.player_id as string),
+					})
+				}
+				return
+			}
+
+			const pairGroups = [
+				players.filter((p) => p.slot_number === 1 || p.slot_number === 2),
+				players.filter((p) => p.slot_number === 3 || p.slot_number === 4),
+			]
+
+			pairGroups.forEach((group) => {
+				if (group.length === 0) return
+				groupedEntries.push({
+					key: `${teeTime.id}-group-${groupNumber}`,
+					label: `Group ${groupNumber++}`,
+					memberNames: group.map((p) => getDisplayName(p.profiles)),
+					memberIds: group.map((p) => p.player_id as string),
+				})
+			})
+		})
+
+		return groupedEntries.length > 0 ? groupedEntries : entries
+	}
+
 	const buildRoundStandings = (roundId: string) => {
 		const rows = entries.map((entry) => {
 			let total = 0
@@ -267,36 +329,30 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		})
 	}
 
-	const currentDayLeaderboard = currentRound ? buildRoundStandings(currentRound.id) : []
-	let currentDayLeaderboardRows = currentDayLeaderboard
+	const currentDayGroupSize = normalizeLeaderboardGroupSize(
+		Number(currentRound?.course_data?.leaderboard_group_size) ||
+			getDefaultLeaderboardGroupSize(currentRound?.mode_key)
+	)
 
-	if (leaderboardActive && currentRound) {
-		const { data: teeTimesData } = await supabase
-			.from('tee_times')
-			.select('id, pairings(slot_number, player_id, profiles:player_id(full_name, email))')
-			.eq('round_id', currentRound.id)
-		const teeTimes = (teeTimesData as TeeTimeRow[] | null) || []
-		const pairEntries: Array<{ key: string; label: string; memberNames: string[]; memberIds: string[] }> = []
-		let pairNumber = 1
-		teeTimes.forEach((teeTime) => {
-			const sortedPairings = [...(teeTime.pairings || [])].sort((a, b) => a.slot_number - b.slot_number)
-			const groups = [
-				sortedPairings.filter((p) => p.slot_number === 1 || p.slot_number === 2),
-				sortedPairings.filter((p) => p.slot_number === 3 || p.slot_number === 4),
-			]
-			groups.forEach((group, groupIndex) => {
-				const players = group.filter((p) => p.player_id)
-				if (players.length === 0) return
-				pairEntries.push({
-					key: `${teeTime.id}-pair-${groupIndex + 1}`,
-					label: `Pair ${pairNumber++}`,
-					memberNames: players.map((p) => getDisplayName(p.profiles)),
-					memberIds: players.map((p) => p.player_id as string),
-				})
-			})
-		})
-		if (pairEntries.length > 0) {
-			const rows = pairEntries.map((entry) => {
+	const currentDayFormatLabel =
+		currentDayGroupSize === 4
+			? '4-Person Teams'
+			: currentDayGroupSize === 2
+				? '2-Person Teams'
+				: 'Individual'
+
+	let currentDayLeaderboardRows: Array<{
+		key: string
+		label: string
+		memberNames: string[]
+		memberIds: string[]
+		score: number | null
+	}> = []
+
+	if (currentRound) {
+		const currentDayEntries = await buildPairingEntries(currentRound.id, currentDayGroupSize)
+		currentDayLeaderboardRows = currentDayEntries
+			.map((entry) => {
 				let total = 0
 				let scoredPlayers = 0
 				entry.memberIds.forEach((memberId) => {
@@ -314,21 +370,22 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 					score: scoredPlayers > 0 ? total : null,
 				}
 			})
-			currentDayLeaderboardRows = rows.sort((a, b) => {
+			.sort((a, b) => {
 				if (a.score === null && b.score === null) return a.label.localeCompare(b.label)
 				if (a.score === null) return 1
 				if (b.score === null) return -1
 				if (a.score !== b.score) return a.score - b.score
 				return a.label.localeCompare(b.label)
 			})
-		}
 	}
 
 	const overallPoints = new Map<string, number>()
-	entries.forEach((entry) => overallPoints.set(entry.key, 0))
+	overallEntries.forEach((entry) => overallPoints.set(entry.key, 0))
 	sortedRounds.forEach((round) => {
-		const standings = buildRoundStandings(round.id).filter((row) => row.score !== null)
-		const teamCount = standings.length
+		const standings = buildRoundStandings(round.id)
+			.filter((row) => row.score !== null)
+			.filter((row) => overallPoints.has(row.key))
+		const teamCount = overallEntries.length
 		if (teamCount === 0) return
 		let rank = 0
 		let previousScore: number | null = null
@@ -341,7 +398,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		})
 	})
 
-	const overallLeaderboard = entries
+	const overallLeaderboard = overallEntries
 		.map((entry) => ({
 			key: entry.key,
 			label: entry.label,
@@ -371,115 +428,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
 			<div className="p-6 space-y-6 -mt-4 relative z-20">
 
-				{/* 1. LEADERBOARDS */}
-				<div id="leaderboards" className="space-y-4">
-					<div className="bg-white p-4 rounded-xl shadow-md border-b-4 border-club-gold">
-						<div className="flex justify-between items-center mb-3">
-							<h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Current Day Leaderboard</h3>
-							<span className="text-[10px] uppercase tracking-wider text-club-navy/60 font-bold">
-								{currentRound ? new Date(`${currentRound.date}T00:00:00`).toLocaleDateString() : 'No Round Set'}
-							</span>
-						</div>
-
-						{!leaderboardActive && (
-							<div className="mb-3 bg-club-paper p-3 rounded border border-club-gold/20">
-								<p className="text-xs text-club-text/70">
-									Leaderboard names are hidden until the organizer activates scoring visibility from Organizer Tools.
-								</p>
-							</div>
-						)}
-
-						{currentDayLeaderboardRows.length > 0 ? (
-							<div className="space-y-2">
-								{currentDayLeaderboardRows.map((row, index) => {
-									const canOpenScorecards = leaderboardActive && currentRound && row.memberIds.length > 0
-									const rowHref = canOpenScorecards
-										? `/events/${id}/scorecards?roundId=${currentRound.id}&players=${encodeURIComponent(row.memberIds.join(','))}`
-										: null
-									const rowContent = (
-										<>
-											<div className="flex items-center gap-3 min-w-0">
-												<div className="bg-club-navy text-white w-8 h-8 rounded-full flex items-center justify-center font-serif text-sm font-bold shrink-0">
-													{index + 1}
-												</div>
-												<div className="min-w-0">
-													<p className="font-bold text-sm text-club-navy truncate">
-														{leaderboardActive ? row.label : `Position ${index + 1}`}
-													</p>
-													{leaderboardActive ? (
-														<p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
-													) : (
-														<p className="text-xs text-gray-400 truncate">Names hidden</p>
-													)}
-												</div>
-											</div>
-											<p className="font-serif font-bold text-club-navy text-lg">
-												{row.score === null ? '--' : row.score}
-											</p>
-										</>
-									)
-									if (rowHref) {
-										return (
-											<Link
-												key={row.key}
-												href={rowHref}
-												className="flex items-center justify-between p-2 rounded-lg border border-gray-100 hover:border-club-gold/50 hover:bg-club-paper/40 transition-colors"
-											>
-												{rowContent}
-											</Link>
-										)
-									}
-									return (
-										<div key={row.key} className="flex items-center justify-between p-2 rounded-lg border border-gray-100">
-											{rowContent}
-										</div>
-									)
-								})}
-							</div>
-						) : (
-							<div className="bg-white/50 p-4 rounded-lg border border-dashed border-gray-300 text-center">
-								<p className="text-sm text-gray-400 italic">No scores posted for today yet.</p>
-							</div>
-						)}
-					</div>
-
-					<div className="bg-white p-4 rounded-xl shadow-md border-b-4 border-club-navy">
-						<div className="flex justify-between items-center mb-3">
-							<h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">Overall Team Leaderboard</h3>
-							<span className="text-[10px] uppercase tracking-wider text-club-navy/60 font-bold">Total Points</span>
-						</div>
-						{overallLeaderboard.length > 0 ? (
-							<div className="space-y-2">
-								{overallLeaderboard.map((row, index) => (
-									<div key={row.key} className="flex items-center justify-between p-2 rounded-lg border border-gray-100">
-										<div className="flex items-center gap-3 min-w-0">
-											<div className="bg-club-gold text-club-navy w-8 h-8 rounded-full flex items-center justify-center font-serif text-sm font-bold shrink-0">
-												{index + 1}
-											</div>
-											<div className="min-w-0">
-												<p className="font-bold text-sm text-club-navy truncate">
-													{leaderboardActive ? row.label : `Position ${index + 1}`}
-												</p>
-												{leaderboardActive ? (
-													<p className="text-xs text-gray-400 truncate">{row.memberNames.join(' & ')}</p>
-												) : (
-													<p className="text-xs text-gray-400 truncate">Names hidden</p>
-												)}
-											</div>
-										</div>
-										<p className="font-serif font-bold text-club-navy text-lg">{row.points}</p>
-									</div>
-								))}
-							</div>
-						) : (
-							<div className="bg-white/50 p-4 rounded-lg border border-dashed border-gray-300 text-center">
-								<p className="text-sm text-gray-400 italic">No teams or scores available yet.</p>
-							</div>
-						)}
-					</div>
-				</div>
-
-				{/* 2. ANNOUNCEMENTS */}
+				{/* 1. ANNOUNCEMENTS */}
 				<div>
 					<div className="flex justify-between items-end mb-2 px-1">
 						<h3 className="font-serif text-lg">Announcements</h3>
@@ -614,6 +563,17 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 						</div>
 					</div>
 				)}
+
+				{/* 4. LEADERBOARD (collapsible, at bottom) */}
+				<CollapsibleLeaderboard
+					eventId={id}
+					leaderboardActive={leaderboardActive}
+					currentDayRows={currentDayLeaderboardRows}
+					overallRows={overallLeaderboard}
+					currentRoundId={currentRound?.id ?? null}
+					currentRoundDate={currentRound?.date ?? null}
+					currentDayFormatLabel={currentDayFormatLabel}
+				/>
 
 			</div>
 		</main>

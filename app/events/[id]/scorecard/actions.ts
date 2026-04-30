@@ -82,11 +82,22 @@ async function canEditScore(
 export async function saveCourseData(eventId: string, roundId: string, courseName: string, holes: any[]) {
   const supabase = await createClient()
 
+  const { data: existingRound } = await supabase
+    .from('rounds')
+    .select('course_data')
+    .eq('id', roundId)
+    .single()
+
+  const existingCourseData =
+    existingRound?.course_data && typeof existingRound.course_data === 'object'
+      ? existingRound.course_data
+      : {}
+
   const { error } = await supabase
     .from('rounds')
     .update({ 
       course_name: courseName,
-      course_data: { holes } // Store the array of 18 holes
+      course_data: { ...existingCourseData, holes } // Keep mode metadata while updating holes
     })
     .eq('id', roundId)
 

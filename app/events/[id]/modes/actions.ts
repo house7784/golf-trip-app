@@ -3,15 +3,42 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { getDefaultLeaderboardGroupSize, normalizeLeaderboardGroupSize } from '@/lib/game_modes'
 
-export async function updateRoundMode(eventId: string, date: string, modeKey: string) {
+export async function updateRoundMode(eventId: string, date: string, modeKey: string, leaderboardGroupSizeRaw?: string) {
   const supabase = await createClient()
+
+  const { data: existingRound } = await supabase
+    .from('rounds')
+    .select('course_data')
+    .eq('event_id', eventId)
+    .eq('date', date)
+    .maybeSingle()
+
+  const fallbackSize = getDefaultLeaderboardGroupSize(modeKey)
+  const parsedSize = Number(leaderboardGroupSizeRaw)
+  const leaderboardGroupSize = Number.isFinite(parsedSize)
+    ? normalizeLeaderboardGroupSize(parsedSize)
+    : fallbackSize
+
+  const existingCourseData =
+    existingRound?.course_data && typeof existingRound.course_data === 'object'
+      ? existingRound.course_data
+      : {}
 
   // We use "upsert" - if a round exists for this date, update it. If not, create it.
   const { error } = await supabase
     .from('rounds')
     .upsert(
-      { event_id: eventId, date, mode_key: modeKey },
+      {
+        event_id: eventId,
+        date,
+        mode_key: modeKey,
+        course_data: {
+          ...existingCourseData,
+          leaderboard_group_size: leaderboardGroupSize,
+        },
+      },
       { onConflict: 'event_id, date' }
     )
 

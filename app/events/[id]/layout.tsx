@@ -31,14 +31,14 @@ export default async function EventLayout({
   return (
     <div className="min-h-screen bg-club-paper">
       {/* Navigation Bar */}
-      <nav className="bg-club-navy text-white p-4 sticky top-0 z-30 shadow-md">
+      <nav className="bg-club-navy text-white px-4 py-3 sticky top-0 z-30 shadow-md">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-            <Link href="/events" className="font-serif font-bold text-xl tracking-wide text-club-gold">
+            <Link href={`/events/${id}/dashboard`} className="font-serif font-bold text-xl tracking-wide text-club-gold">
               GOLF TRIP
             </Link>
-            <div className="flex items-center gap-6 text-sm font-bold uppercase tracking-widest">
+            <div className="flex items-center gap-4 sm:gap-6 text-xs sm:text-sm font-bold uppercase tracking-widest">
+              <Link href={`/events/${id}/dashboard`} className="hover:text-club-gold transition hidden sm:block">Dashboard</Link>
               <Link href={`/events/${id}/tee-times`} className="hover:text-club-gold transition">Tee Times</Link>
-              <Link href={`/events/${id}/dashboard#leaderboards`} className="hover:text-club-gold transition">Leaderboard</Link>
               <Link href="/profile" className="text-white/70 hover:text-white transition-colors" title="Profile">
                 <User size={18} />
               </Link>

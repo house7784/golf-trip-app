@@ -49,6 +49,7 @@ export default async function LoginPage({
             required 
             placeholder="member@club.com"
             className="w-full bg-white border border-club-gold/40 p-3 rounded-sm focus:outline-none focus:border-club-navy transition-colors"
+            suppressHydrationWarning
           />
         </div>
 
@@ -62,6 +63,7 @@ export default async function LoginPage({
             required 
             placeholder="••••••••"
             className="w-full bg-white border border-club-gold/40 p-3 rounded-sm focus:outline-none focus:border-club-navy transition-colors"
+            suppressHydrationWarning
           />
         </div>
 

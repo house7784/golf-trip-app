@@ -34,8 +34,42 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
   const [unreadCount, setUnreadCount] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const seenMessageIdsRef = useRef<Set<string>>(new Set())
+  const lastSeenAtRef = useRef<number>(0)
+  const unreadStorageKey = `trash-talk:last-seen:${eventId}:${currentUser.id}`
   const [supabase] = useState(() => createClient())
+
+  const getLatestOtherMessageTime = (items: MessageRow[]) => {
+    let latest = 0
+    items.forEach((message) => {
+      if (message.user_id === currentUser.id) return
+      const timestamp = new Date(message.created_at).getTime()
+      if (!Number.isNaN(timestamp)) {
+        latest = Math.max(latest, timestamp)
+      }
+    })
+    return latest
+  }
+
+  const persistLastSeen = (timestamp: number) => {
+    lastSeenAtRef.current = timestamp
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(unreadStorageKey, String(timestamp))
+    }
+  }
+
+  const markAllRead = (items: MessageRow[]) => {
+    persistLastSeen(getLatestOtherMessageTime(items))
+    setUnreadCount(0)
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const raw = window.localStorage.getItem(unreadStorageKey)
+    const parsed = Number(raw)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      lastSeenAtRef.current = parsed
+    }
+  }, [unreadStorageKey])
 
   useEffect(() => {
     let isActive = true
@@ -50,20 +84,23 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
       if (!data || !isActive) return
 
       const normalized = data as MessageRow[]
-      const knownIds = seenMessageIdsRef.current
-      const incomingCount = normalized.filter(
-        (message) =>
-          !knownIds.has(String(message.id)) &&
-          message.user_id !== currentUser.id
-      ).length
 
-      normalized.forEach((message) => {
-        knownIds.add(String(message.id))
-      })
+      if (lastSeenAtRef.current === 0) {
+        persistLastSeen(getLatestOtherMessageTime(normalized))
+      }
+
+      const incomingCount = normalized.filter((message) => {
+        if (message.user_id === currentUser.id) return false
+        const timestamp = new Date(message.created_at).getTime()
+        if (Number.isNaN(timestamp)) return false
+        return timestamp > lastSeenAtRef.current
+      }).length
 
       setMessages(normalized)
 
-      if (!isOpen && incomingCount > 0) {
+      if (isOpen) {
+        markAllRead(normalized)
+      } else if (incomingCount > 0) {
         setUnreadCount((prev) => prev + incomingCount)
       }
     }
@@ -110,9 +147,28 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
     }
   }, [isOpen])
 
+  // Clear badge whenever the panel opens
+  useEffect(() => {
+    if (!isOpen) return
+    markAllRead(messages)
+  }, [isOpen])
+
+  // Escape key closes the modal
+  useEffect(() => {
+    if (!isOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isOpen])
+
+  const handleClose = () => {
+    setIsOpen(false)
+    markAllRead(messages)
+  }
+
   const handleOpen = () => {
     setIsOpen(true)
-    setUnreadCount(0)
+    markAllRead(messages)
   }
 
   const handleSend = async (e: React.FormEvent) => {
@@ -204,7 +260,7 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
       {isOpen && (
         <div
           className="fixed inset-0 z-[100] flex justify-end bg-black/60 backdrop-blur-sm"
-          onClick={() => setIsOpen(false)}
+          onClick={handleClose}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -216,7 +272,19 @@ export default function TrashTalk({ eventId, currentUser, variant = 'floating', 
                 <h2 className="font-serif text-xl font-bold tracking-wide">Trash Talk</h2>
                 <p className="text-xs text-club-gold font-bold uppercase tracking-wider">Live Chat</p>
               </div>
-              <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-2 rounded-full transition text-club-gold">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleClose()
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation()
+                  handleClose()
+                }}
+                className="hover:bg-white/10 p-2 rounded-full transition text-club-gold"
+                aria-label="Close chat"
+              >
                 <X size={24} />
               </button>
             </div>
