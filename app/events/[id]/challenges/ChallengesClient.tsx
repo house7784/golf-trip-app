@@ -9,7 +9,6 @@ import {
   deleteChallenge,
   respondToChallenge,
   setResult,
-  witnessApprove,
   markCompleted,
 } from './actions'
 
@@ -158,15 +157,11 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
 
   const handleSetResult = (challengeId: string, winnerId: string) => {
     startTransition(async () => {
-      await setResult(challengeId, winnerId)
-      setDetailOpen(false)
-      router.refresh()
-    })
-  }
-
-  const handleWitnessApprove = (challengeId: string) => {
-    startTransition(async () => {
-      await witnessApprove(challengeId)
+      const result = await setResult(challengeId, winnerId)
+      if (result?.error) {
+        window.alert(result.error)
+        return
+      }
       setDetailOpen(false)
       router.refresh()
     })
@@ -174,7 +169,11 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
 
   const handleMarkCompleted = (challengeId: string) => {
     startTransition(async () => {
-      await markCompleted(challengeId)
+      const result = await markCompleted(challengeId)
+      if (result?.error) {
+        window.alert(result.error)
+        return
+      }
       setDetailOpen(false)
       router.refresh()
     })
@@ -205,7 +204,7 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
   const c = detailChallenge
   const amChallenged = c?.challenged_id === currentUserId
   const amChallenger = c?.challenger_id === currentUserId
-  const amWitness = c?.witness_id === currentUserId
+  const amWinner = c?.winner_id === currentUserId
   const loserId = c?.winner_id
     ? c.winner_id === c.challenger_id
       ? c.challenged_id
@@ -458,9 +457,6 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
                     <p className="font-semibold text-club-navy flex items-center gap-1.5">
                       <UserCheck size={14} />
                       {getName(c.witness_id)}
-                      {c.witness_approved && (
-                        <span className="text-emerald-600 text-xs font-bold">✓ Approved</span>
-                      )}
                     </p>
                   </div>
                 )}
@@ -523,19 +519,8 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
                 </div>
               )}
 
-              {/* Witness approves result */}
-              {c.status === 'awaiting_witness' && amWitness && (
-                <button
-                  onClick={() => handleWitnessApprove(c.id)}
-                  disabled={isPending}
-                  className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
-                >
-                  <UserCheck size={18} /> Approve Result as Witness
-                </button>
-              )}
-
-              {/* Loser marks settled */}
-              {c.status === 'result_set' && amLoser && (
+              {/* Winner or loser can settle */}
+              {['result_set', 'awaiting_witness'].includes(c.status) && (amLoser || amWinner) && (
                 <button
                   onClick={() => handleMarkCompleted(c.id)}
                   disabled={isPending}
