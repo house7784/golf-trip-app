@@ -712,6 +712,14 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 					</Link>
 
 					<Link
+						href={`/events/${id}/teams`}
+						className="bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition"
+					>
+						<Users size={28} className="text-club-gold" />
+						<span className="font-bold text-xs uppercase tracking-wider">Teams</span>
+					</Link>
+
+					<Link
 						href={`/events/${id}/challenges`}
 						className="bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition"
 					>
