@@ -524,7 +524,7 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
                 <button
                   onClick={() => handleMarkCompleted(c.id)}
                   disabled={isPending}
-                  className="w-full bg-club-navy text-white font-bold py-4 rounded-xl hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
+                  className="w-full bg-club-navy text-Black font-bold py-4 rounded-xl hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
                 >
                   <CheckCircle2 size={18} /> Mark as Settled
                 </button>
