@@ -131,3 +131,94 @@ export async function submitScore(eventId: string, roundId: string, userId: stri
   revalidatePath(`/events/${eventId}/scorecard`)
   revalidatePath(`/events/${eventId}/dashboard`)
 }
+
+// 3. SCRAMBLE: Submit one shared score for every player in the group
+export async function submitScrambleScore(
+  eventId: string,
+  roundId: string,
+  anchorPlayerId: string,
+  groupPlayerIds: string[],
+  holeScores: Record<string, number>
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  // Verify the caller can edit the anchor player's scorecard (covers own group + organizer)
+  const allowed = await canEditScore(supabase, eventId, roundId, user.id, anchorPlayerId)
+  if (!allowed) throw new Error('Not allowed to edit this scorecard')
+
+  const upserts = groupPlayerIds.map((playerId) => ({
+    round_id: roundId,
+    user_id: playerId,
+    hole_scores: holeScores,
+  }))
+
+  const { error } = await supabase
+    .from('scores')
+    .upsert(upserts, { onConflict: 'round_id, user_id' })
+
+  if (error) throw new Error('Failed to submit scramble score')
+
+  revalidatePath(`/events/${eventId}/scorecard`)
+  revalidatePath(`/events/${eventId}/dashboard`)
+}
+// 5. 666 STABLEFORD: Submit one shared team payload for both partners
+export async function submitStableford666Score(
+  eventId: string,
+  roundId: string,
+  anchorPlayerId: string,
+  groupPlayerIds: string[],
+  holeScores: Record<string, any>
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  const allowed = await canEditScore(supabase, eventId, roundId, user.id, anchorPlayerId)
+  if (!allowed) throw new Error('Not allowed to edit this scorecard')
+
+  const upserts = groupPlayerIds.map((playerId) => ({
+    round_id: roundId,
+    user_id: playerId,
+    hole_scores: holeScores,
+  }))
+
+  const { error } = await supabase
+    .from('scores')
+    .upsert(upserts, { onConflict: 'round_id, user_id' })
+
+  if (error) throw new Error('Failed to submit 666 stableford score')
+
+  revalidatePath(`/events/${eventId}/scorecard`)
+  revalidatePath(`/events/${eventId}/dashboard`)
+}
+// 4. BEST BALL: Submit one scorecard per player in the active group
+export async function submitBestBallScores(
+  eventId: string,
+  roundId: string,
+  anchorPlayerId: string,
+  playerScores: Record<string, Record<string, number>>
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorized')
+
+  const allowed = await canEditScore(supabase, eventId, roundId, user.id, anchorPlayerId)
+  if (!allowed) throw new Error('Not allowed to edit this scorecard')
+
+  const upserts = Object.entries(playerScores).map(([playerId, holeScores]) => ({
+    round_id: roundId,
+    user_id: playerId,
+    hole_scores: holeScores,
+  }))
+
+  const { error } = await supabase
+    .from('scores')
+    .upsert(upserts, { onConflict: 'round_id, user_id' })
+
+  if (error) throw new Error('Failed to submit best ball scores')
+
+  revalidatePath(`/events/${eventId}/scorecard`)
+  revalidatePath(`/events/${eventId}/dashboard`)
+}

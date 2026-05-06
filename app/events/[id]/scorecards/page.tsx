@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
+import { calculateStableford666TotalPoints, getStableford666Segment, getStableford666SegmentLabel } from '@/lib/stableford_666'
 
 function getDisplayName(profile?: { full_name?: string | null; email?: string | null } | null) {
   return profile?.full_name || 'Golfer'
@@ -64,7 +65,7 @@ export default async function PairScorecardsPage({
 
   const { data: roundsData } = await supabase
     .from('rounds')
-    .select('id, date, course_name, course_data')
+    .select('id, date, mode_key, course_name, course_data')
     .eq('event_id', id)
     .not('course_data', 'is', null)
     .order('date')
@@ -90,7 +91,7 @@ export default async function PairScorecardsPage({
 
   const { data: participantRows } = await supabase
     .from('event_participants')
-    .select('user_id, profiles:user_id(full_name, email)')
+    .select('user_id, event_handicap, profiles:user_id(full_name, email, handicap_index)')
     .eq('event_id', id)
     .in('user_id', playerIds.length > 0 ? playerIds : [''])
 
@@ -103,7 +104,7 @@ export default async function PairScorecardsPage({
     .eq('round_id', activeRound.id)
     .in('user_id', validPlayerIds.length > 0 ? validPlayerIds : [''])
 
-  const scoreByUserId = new Map<string, Record<string, number> | null>()
+  const scoreByUserId = new Map<string, Record<string, any> | null>()
   ;(scoreRows || []).forEach((row: any) => {
     scoreByUserId.set(row.user_id, row.hole_scores || {})
   })
@@ -129,18 +130,102 @@ export default async function PairScorecardsPage({
           <p className="font-serif text-xl mb-2">No pair selected</p>
           <p className="text-sm text-gray-500">Pick a pair from the Current Day Leaderboard to view scorecards.</p>
         </div>
+      ) : activeRound.mode_key === 'stableford' && participants.length === 2 ? (
+        // Merged pair scorecard for 666 Stableford
+        <div className="max-w-4xl mx-auto">
+          {(() => {
+            const player1 = participants[0]
+            const player2 = participants[1]
+            const player1Profile = Array.isArray(player1.profiles) ? player1.profiles[0] : player1.profiles
+            const player2Profile = Array.isArray(player2.profiles) ? player2.profiles[0] : player2.profiles
+            const player1Name = getDisplayName(player1Profile)
+            const player2Name = getDisplayName(player2Profile)
+            const scores1 = scoreByUserId.get(player1.user_id) || {}
+            const scores2 = scoreByUserId.get(player2.user_id) || {}
+            const handicapByPlayerId = Object.fromEntries(
+              participants.map((entry: any) => [
+                entry.user_id,
+                Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0),
+              ])
+            )
+            const totalPoints = calculateStableford666TotalPoints(scores1, holes, handicapByPlayerId) +
+                               calculateStableford666TotalPoints(scores2, holes, handicapByPlayerId)
+
+            return (
+              <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-4 border-b border-gray-100">
+                  <h2 className="font-serif text-lg text-club-navy mb-2">{player1Name} & {player2Name}</h2>
+                  <span className="text-sm font-bold text-club-navy">Total Points: {totalPoints || 0}</span>
+                </div>
+
+                {holes.length > 0 ? (
+                  <div className="divide-y divide-gray-100">
+                    {holes.map((hole: any) => {
+                      const segment = getStableford666Segment(hole.number)
+                      const segmentLabel = getStableford666SegmentLabel(hole.number)
+                      const score1 = scores1?.[hole.number] ?? '--'
+                      const score2 = scores2?.[hole.number] ?? '--'
+                      
+                      return (
+                        <div key={hole.number} className="px-4 py-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <span className="font-bold text-club-navy">{hole.number}</span>
+                              <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
+                              <span className="text-gray-400 text-xs">{segmentLabel}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-4 text-sm">
+                            {segment === 'scramble' || segment === 'modified_alt_shot' ? (
+                              <div className="flex-1">
+                                <span className="text-gray-500 text-xs">Team Score</span>
+                                <span className="block font-semibold text-club-navy">{score1}</span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex-1">
+                                  <span className="text-gray-500 text-xs">{player1Name}</span>
+                                  <span className="block font-semibold text-club-navy">{score1}</span>
+                                </div>
+                                <div className="flex-1">
+                                  <span className="text-gray-500 text-xs">{player2Name}</span>
+                                  <span className="block font-semibold text-club-navy">{score2}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-4 text-sm text-gray-500">No hole setup found for this round.</div>
+                )}
+              </section>
+            )
+          })()}
+        </div>
       ) : (
+        // Standard two-card layout for other modes
         <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
           {participants.map((participant: any) => {
             const playerName = getDisplayName(participant.profiles)
             const scores = scoreByUserId.get(participant.user_id) || {}
-            const total = totalScore(scores)
+            const handicapByPlayerId = Object.fromEntries(
+              participants.map((entry: any) => [
+                entry.user_id,
+                Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0),
+              ])
+            )
+            const total = activeRound.mode_key === 'stableford'
+              ? calculateStableford666TotalPoints(scores, holes, handicapByPlayerId)
+              : totalScore(scores)
 
             return (
               <section key={participant.user_id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                   <h2 className="font-serif text-lg text-club-navy truncate">{playerName}</h2>
-                  <span className="text-sm font-bold text-club-navy">Total: {total || '--'}</span>
+                  <span className="text-sm font-bold text-club-navy">{activeRound.mode_key === 'stableford' ? `Points: ${total || 0}` : `Total: ${total || '--'}`}</span>
                 </div>
 
                 {holes.length > 0 ? (

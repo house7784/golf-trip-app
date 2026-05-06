@@ -5,7 +5,13 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getDefaultLeaderboardGroupSize, normalizeLeaderboardGroupSize } from '@/lib/game_modes'
 
-export async function updateRoundMode(eventId: string, date: string, modeKey: string, leaderboardGroupSizeRaw?: string) {
+export async function updateRoundMode(
+  eventId: string,
+  date: string,
+  modeKey: string,
+  leaderboardGroupSizeRaw?: string,
+  bestBallMatchplayRaw?: string | null
+) {
   const supabase = await createClient()
 
   const { data: existingRound } = await supabase
@@ -20,6 +26,7 @@ export async function updateRoundMode(eventId: string, date: string, modeKey: st
   const leaderboardGroupSize = Number.isFinite(parsedSize)
     ? normalizeLeaderboardGroupSize(parsedSize)
     : fallbackSize
+  const bestBallMatchplay = modeKey === 'best_ball' && bestBallMatchplayRaw === 'on'
 
   const existingCourseData =
     existingRound?.course_data && typeof existingRound.course_data === 'object'
@@ -37,6 +44,7 @@ export async function updateRoundMode(eventId: string, date: string, modeKey: st
         course_data: {
           ...existingCourseData,
           leaderboard_group_size: leaderboardGroupSize,
+          best_ball_matchplay: bestBallMatchplay,
         },
       },
       { onConflict: 'event_id, date' }
@@ -48,4 +56,6 @@ export async function updateRoundMode(eventId: string, date: string, modeKey: st
   }
 
   revalidatePath(`/events/${eventId}/modes`)
+  revalidatePath(`/events/${eventId}/scorecard`)
+  revalidatePath(`/events/${eventId}/dashboard`)
 }

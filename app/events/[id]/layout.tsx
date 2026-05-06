@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { User } from 'lucide-react'
+import ChallengeNotificationCenter from './ChallengeNotificationCenter'
 
 export default async function EventLayout({
   children,
@@ -50,6 +51,8 @@ export default async function EventLayout({
       </nav>
 
       <div aria-hidden="true" className="h-16" />
+
+      <ChallengeNotificationCenter eventId={id} currentUserId={user.id} />
 
       <main className="max-w-6xl mx-auto h-[calc(100vh-4rem)] overflow-y-auto p-4 pb-24">
         {children}

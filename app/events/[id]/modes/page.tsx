@@ -1,9 +1,9 @@
 // app/events/[id]/modes/page.tsx
 import { createClient } from '@/utils/supabase/server'
 import { GAME_MODES, GameModeKey, getDefaultLeaderboardGroupSize, normalizeLeaderboardGroupSize } from '@/lib/game_modes'
-import { updateRoundMode } from './actions'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
+import ModeCard from './ModeCard'
 
 // Helper to generate list of dates between start and end
 function getDatesInRange(startDate: string, endDate: string) {
@@ -52,75 +52,23 @@ export default async function GameModesPage({ params }: { params: Promise<{ id: 
           // Find if we already saved a mode for this date
           const savedRound = rounds?.find((r: any) => r.date === date)
           const currentModeKey = savedRound?.mode_key as GameModeKey
-          const modeInfo = currentModeKey ? GAME_MODES[currentModeKey] : null
-          const currentLeaderboardGroupSize = normalizeLeaderboardGroupSize(
-            Number(savedRound?.course_data?.leaderboard_group_size) || getDefaultLeaderboardGroupSize(currentModeKey)
-          )
+          const currentBestBallMatchplay = Boolean(savedRound?.course_data?.best_ball_matchplay)
+          const currentLeaderboardGroupSize = currentModeKey === 'stableford'
+            ? 2
+            : normalizeLeaderboardGroupSize(
+                Number(savedRound?.course_data?.leaderboard_group_size) || getDefaultLeaderboardGroupSize(currentModeKey)
+              )
 
           return (
-            <div key={date} className="bg-club-paper p-6 rounded-sm shadow-md border-t-4 border-club-navy relative">
-              
-              {/* Date Header */}
-              <div className="flex items-center gap-2 mb-4">
-                <div className="bg-club-gold text-club-navy font-bold text-xs px-2 py-1 rounded uppercase tracking-wider">
-                  Round {index + 1}
-                </div>
-                <h2 className="font-serif text-xl">
-                  {new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                </h2>
-              </div>
-
-              {/* Description Box (If selected) */}
-              {modeInfo && (
-                <div className="mb-4 bg-white/50 p-3 rounded border border-club-navy/10">
-                  <div className="flex items-center gap-2 mb-1 text-club-navy">
-                    {modeInfo.icon && <modeInfo.icon size={16} />}
-                    <span className="font-bold text-sm">{modeInfo.name}</span>
-                  </div>
-                  <p className="text-xs text-club-text/70 italic leading-relaxed">
-                    "{modeInfo.description}"
-                  </p>
-                </div>
-              )}
-
-              {/* Selection Form */}
-              <form action={async (formData) => {
-                'use server'
-                await updateRoundMode(
-                  id,
-                  date,
-                  formData.get('mode') as string,
-                  formData.get('leaderboardGroupSize') as string
-                )
-              }}>
-                <select 
-                  name="mode" 
-                  // In a real app we'd auto-submit with JS, but the save button is safer for now
-                  defaultValue={currentModeKey || ""}
-                  className="w-full bg-white border border-club-gold/40 p-3 rounded-sm font-serif text-club-navy mb-2"
-                >
-                  <option value="" disabled>-- Select Format --</option>
-                  {Object.entries(GAME_MODES).map(([key, info]) => (
-                    <option key={key} value={key}>{info.name}</option>
-                  ))}
-                </select>
-
-                <select
-                  name="leaderboardGroupSize"
-                  defaultValue={String(currentLeaderboardGroupSize)}
-                  className="w-full bg-white border border-club-gold/40 p-3 rounded-sm font-serif text-club-navy mb-3"
-                >
-                  <option value="1">Current Day Leaderboard: Individual</option>
-                  <option value="2">Current Day Leaderboard: 2-Person Teams</option>
-                  <option value="4">Current Day Leaderboard: 4-Person Teams</option>
-                </select>
-                
-                <button className="w-full bg-club-navy text-white py-2 rounded-sm text-xs font-bold uppercase tracking-widest hover:bg-opacity-90">
-                  Save Format
-                </button>
-              </form>
-
-            </div>
+            <ModeCard
+              key={date}
+              eventId={id}
+              date={date}
+              index={index}
+              currentModeKey={currentModeKey}
+              currentLeaderboardGroupSize={currentLeaderboardGroupSize}
+              currentBestBallMatchplay={currentBestBallMatchplay}
+            />
           )
         })}
 

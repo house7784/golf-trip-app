@@ -2,7 +2,8 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { ChevronLeft, Save } from 'lucide-react'
-import { submitScore } from './actions'
+import { submitBestBallScores, submitScore, submitScrambleScore } from './actions'
+import Stableford666Scorecard from './Stableford666Scorecard'
 
 function samePair(slotA: number, slotB: number) {
   return (slotA <= 2 && slotB <= 2) || (slotA >= 3 && slotB >= 3)
@@ -80,7 +81,7 @@ export default async function ScorecardPage({
 
   const { data: participants } = await supabase
     .from('event_participants')
-    .select('user_id, team_id, profiles:user_id(full_name)')
+    .select('user_id, team_id, event_handicap, profiles:user_id(full_name, handicap_index)')
     .eq('event_id', id)
 
   const participantById = new Map<string, any>()
@@ -92,6 +93,23 @@ export default async function ScorecardPage({
     .eq('tee_times.round_id', activeRound.id)
 
   const actorPair = (pairings || []).find((entry: any) => entry.player_id === user?.id)
+
+  // ── Grouped mode detection ───────────────────────────────────────────────
+  const isScramble = activeRound.mode_key === 'scramble'
+  const isBestBall = activeRound.mode_key === 'best_ball'
+  const isStableford666 = activeRound.mode_key === 'stableford'
+  const isGroupedMode = isScramble || isBestBall || isStableford666
+  const groupedModeSize: number = (() => {
+    const raw = (activeRound as any).course_data?.leaderboard_group_size
+    if (raw === 2 || raw === 4) return raw
+    if (isScramble) return 4
+    if (isBestBall || isStableford666) return 2
+    return 1
+  })()
+
+  let groupedModeIds: string[] = []
+  let groupedModeNames: string[] = []
+  // ─────────────────────────────────────────────────────────────────────────
 
   const editableUserIds = new Set<string>()
   if (user?.id) editableUserIds.add(user.id)
@@ -141,16 +159,46 @@ export default async function ScorecardPage({
     'Golfer'
 
   const canEditSelected = isOrganizer || !scoringLocked
-  
-  // 2. Get Existing Scores for this user
-  const { data: existingScore } = await supabase
-    .from('scores')
-    .select('hole_scores')
-    .eq('round_id', activeRound.id)
-    .eq('user_id', selectedPlayerId)
-    .single()
 
-  const scores = existingScore?.hole_scores || {}
+  // Resolve grouped-mode team now that selectedPlayerId is known
+  if (isGroupedMode) {
+    const anchorPairing = (pairings || []).find((p: any) => p.player_id === selectedPlayerId)
+    if (anchorPairing) {
+      const sameTeeTime = (pairings || []).filter((p: any) => p.tee_time_id === anchorPairing.tee_time_id && p.player_id)
+      const inGroup = groupedModeSize === 4
+        ? sameTeeTime
+        : sameTeeTime.filter((p: any) => samePair(p.slot_number, anchorPairing.slot_number))
+      groupedModeIds = inGroup.map((p: any) => p.player_id as string)
+      groupedModeNames = groupedModeIds.map(
+        (pid) => participantById.get(pid)?.profiles?.full_name || 'Golfer'
+      )
+    }
+    if (groupedModeIds.length === 0 && selectedPlayerId) {
+      groupedModeIds = [selectedPlayerId]
+      groupedModeNames = [selectedPlayerName]
+    }
+  }
+  
+  const scoreIdsToLoad = isBestBall || isStableford666 ? groupedModeIds : [selectedPlayerId]
+  const { data: existingScores } = await supabase
+    .from('scores')
+    .select('user_id, hole_scores')
+    .eq('round_id', activeRound.id)
+    .in('user_id', scoreIdsToLoad)
+
+  const scoresByPlayerId = new Map<string, Record<string, any>>()
+  ;(existingScores || []).forEach((row: any) => {
+    scoresByPlayerId.set(row.user_id, row.hole_scores || {})
+  })
+
+  const scores = scoresByPlayerId.get(selectedPlayerId) || {}
+  const stablefordPlayers = groupedModeIds.map((playerId) => ({
+    id: playerId,
+    name: participantById.get(playerId)?.profiles?.full_name || 'Golfer',
+    handicap: Number(
+      participantById.get(playerId)?.event_handicap ?? participantById.get(playerId)?.profiles?.handicap_index ?? 0
+    ),
+  }))
 
   return (
     <main className="min-h-screen bg-club-cream text-club-navy p-6 pb-24">
@@ -165,7 +213,7 @@ export default async function ScorecardPage({
         </div>
       </div>
 
-      {!isTeamManageMode && editablePlayers.length > 0 && (
+      {!isTeamManageMode && editablePlayers.length > 0 && (!isGroupedMode || isOrganizer) && (
         <div className="max-w-md mx-auto mb-4">
           <div className="bg-white rounded-lg border border-gray-200 p-3">
             <label className="block text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">
@@ -240,74 +288,173 @@ export default async function ScorecardPage({
 
       {/* SCORECARD FORM */}
       <div className="max-w-md mx-auto">
-        <div className="mb-3 bg-club-paper border border-club-gold/30 rounded-lg px-3 py-2">
-          <p className="text-xs uppercase tracking-wider font-bold text-club-text/60">Entering Scores For</p>
-          <p className="text-base font-serif font-bold text-club-navy">{selectedPlayerName}</p>
-        </div>
+        {isStableford666 ? (
+          <Stableford666Scorecard
+            eventId={id}
+            roundId={activeRound.id}
+            anchorPlayerId={selectedPlayerId}
+            canEdit={canEditSelected}
+            holes={course.holes || []}
+            players={stablefordPlayers}
+            initialPayload={scoresByPlayerId.get(groupedModeIds[0]) || scores}
+          />
+        ) : (
+          <>
+            {isScramble ? (
+              <div className="mb-3 bg-club-paper border border-club-gold/30 rounded-lg px-3 py-2">
+                <p className="text-xs uppercase tracking-wider font-bold text-club-text/60">Scramble Group</p>
+                <p className="text-base font-serif font-bold text-club-navy">{groupedModeNames.join(' · ')}</p>
+                <p className="text-[11px] text-club-text/50 mt-0.5">One score is shared across the whole group</p>
+              </div>
+            ) : isBestBall ? (
+              <div className="mb-3 bg-club-paper border border-club-gold/30 rounded-lg px-3 py-2">
+                <p className="text-xs uppercase tracking-wider font-bold text-club-text/60">Best Ball Team</p>
+                <p className="text-base font-serif font-bold text-club-navy">{groupedModeNames.join(' · ')}</p>
+                <p className="text-[11px] text-club-text/50 mt-0.5">Each player enters their own gross score. The best net ball counts on each hole.</p>
+              </div>
+            ) : (
+              <div className="mb-3 bg-club-paper border border-club-gold/30 rounded-lg px-3 py-2">
+                <p className="text-xs uppercase tracking-wider font-bold text-club-text/60">Entering Scores For</p>
+                <p className="text-base font-serif font-bold text-club-navy">{selectedPlayerName}</p>
+              </div>
+            )}
 
-        <form key={`${activeRound.id}:${selectedPlayerId}`} action={async (formData) => {
-            'use server'
-            const newScores: any = {}
-            // Extract scores from form
-            for (let i = 1; i <= 18; i++) {
-                const val = formData.get(`hole_${i}`)
-                if (val) newScores[i] = parseInt(val as string)
-            }
-            await submitScore(id, activeRound.id, formData.get('playerId') as string, newScores)
-        }}>
-            <input type="hidden" name="playerId" value={selectedPlayerId} />
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                {course.holes.map((hole: any) => {
+            <form key={`${activeRound.id}:${selectedPlayerId}`} action={async (formData) => {
+                'use server'
+                const newScores: Record<string, number> = {}
+                for (let i = 1; i <= 18; i++) {
+                    const val = formData.get(`hole_${i}`)
+                    if (val) newScores[i] = parseInt(val as string)
+                }
+                if (formData.get('scramble') === '1') {
+                  const groupIds = formData.getAll('groupPlayerId') as string[]
+                  const anchor = formData.get('playerId') as string
+                  await submitScrambleScore(id, activeRound.id, anchor, groupIds, newScores)
+                } else if (formData.get('bestBall') === '1') {
+                  const groupIds = formData.getAll('groupPlayerId') as string[]
+                  const anchor = formData.get('playerId') as string
+                  const playerScores: Record<string, Record<string, number>> = {}
+                  groupIds.forEach((groupId) => {
+                  const groupHoleScores: Record<string, number> = {}
+                  for (let i = 1; i <= 18; i++) {
+                    const val = formData.get(`player_${groupId}_hole_${i}`)
+                    if (val) groupHoleScores[i] = parseInt(val as string)
+                  }
+                  playerScores[groupId] = groupHoleScores
+                  })
+                  await submitBestBallScores(id, activeRound.id, anchor, playerScores)
+                } else {
+                  await submitScore(id, activeRound.id, formData.get('playerId') as string, newScores)
+                }
+            }}>
+                <input type="hidden" name="playerId" value={selectedPlayerId} />
+                {isScramble && (
+                  <>
+                    <input type="hidden" name="scramble" value="1" />
+                  {groupedModeIds.map((gid) => (
+                    <input key={gid} type="hidden" name="groupPlayerId" value={gid} />
+                  ))}
+                  </>
+                )}
+                {isBestBall && (
+                  <>
+                  <input type="hidden" name="bestBall" value="1" />
+                  {groupedModeIds.map((gid) => (
+                      <input key={gid} type="hidden" name="groupPlayerId" value={gid} />
+                    ))}
+                  </>
+                )}
+                
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                  {isBestBall ? course.holes.map((hole: any) => (
+                    <div key={hole.number} className="border-b border-gray-100 last:border-0 p-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <span className="font-serif text-xl font-bold">Hole {hole.number}</span>
+                          <span className="ml-2 text-[10px] text-gray-400 uppercase">Par {hole.par}</span>
+                        </div>
+                        <div className="text-center text-[10px] text-gray-300">
+                          HCP {hole.hcp}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {groupedModeIds.map((groupPlayerId) => {
+                          const playerName = participantById.get(groupPlayerId)?.profiles?.full_name || 'Golfer'
+                          const currentVal = scoresByPlayerId.get(groupPlayerId)?.[hole.number]
+                          let scoreColor = 'text-club-navy'
+                          if (currentVal) {
+                            if (currentVal < hole.par) scoreColor = 'text-red-500 font-bold'
+                            if (currentVal > hole.par) scoreColor = 'text-blue-500'
+                          }
+
+                          return (
+                            <label key={`${groupPlayerId}-${hole.number}`} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                              <span className="block text-[11px] font-bold uppercase tracking-wider text-club-text/60 truncate">
+                                {playerName}
+                              </span>
+                              <input
+                                name={`player_${groupPlayerId}_hole_${hole.number}`}
+                                type="number"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                defaultValue={currentVal}
+                                placeholder="-"
+                                disabled={!canEditSelected}
+                                className={`mt-1 w-full bg-transparent text-center text-2xl outline-none ${scoreColor}`}
+                              />
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )) : course.holes.map((hole: any) => {
                     const currentVal = scores[hole.number]
-                    
-                    // Style logic for score (Birdie, Bogey, etc)
+                        
                     let scoreColor = 'text-club-navy'
                     if (currentVal) {
-                        if (currentVal < hole.par) scoreColor = 'text-red-500 font-bold' // Birdie
-                        if (currentVal > hole.par) scoreColor = 'text-blue-500' // Bogey
+                      if (currentVal < hole.par) scoreColor = 'text-red-500 font-bold'
+                      if (currentVal > hole.par) scoreColor = 'text-blue-500'
                     }
 
                     return (
-                        <div key={hole.number} className="flex items-center border-b border-gray-100 last:border-0 p-3">
-                            {/* Hole Info */}
-                            <div className="w-16 flex flex-col items-center justify-center border-r border-gray-100 pr-3">
-                                <span className="font-serif text-xl font-bold">{hole.number}</span>
-                                <span className="text-[10px] text-gray-400 uppercase">Par {hole.par}</span>
-                            </div>
-
-                            {/* Input Area */}
-                            <div className="flex-1 flex items-center justify-center">
-                                <input 
-                                    name={`hole_${hole.number}`}
-                                    type="number" 
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    defaultValue={currentVal}
-                                    placeholder="-"
-                                    disabled={!canEditSelected}
-                                    className={`w-full text-center text-2xl outline-none bg-transparent ${scoreColor}`}
-                                />
-                            </div>
-
-                            {/* HCP Helper */}
-                            <div className="w-12 text-center text-[10px] text-gray-300">
-                                HCP<br/>{hole.hcp}
-                            </div>
+                      <div key={hole.number} className="flex items-center border-b border-gray-100 last:border-0 p-3">
+                        <div className="w-16 flex flex-col items-center justify-center border-r border-gray-100 pr-3">
+                          <span className="font-serif text-xl font-bold">{hole.number}</span>
+                          <span className="text-[10px] text-gray-400 uppercase">Par {hole.par}</span>
                         </div>
+
+                        <div className="flex-1 flex items-center justify-center">
+                          <input 
+                            name={`hole_${hole.number}`}
+                            type="number" 
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            defaultValue={currentVal}
+                            placeholder="-"
+                            disabled={!canEditSelected}
+                            className={`w-full text-center text-2xl outline-none bg-transparent ${scoreColor}`}
+                          />
+                        </div>
+
+                        <div className="w-12 text-center text-[10px] text-gray-300">
+                          HCP<br/>{hole.hcp}
+                        </div>
+                      </div>
                     )
-                })}
-            </div>
+                  })}
+                </div>
 
-            {/* Floating Save Button */}
-            <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto">
-              <button disabled={!canEditSelected} className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    <Save size={18} />
-                    Save Card
-                </button>
-            </div>
+                <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto">
+                  <button disabled={!canEditSelected} className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <Save size={18} />
+                        Save Card
+                    </button>
+                </div>
 
-        </form>
+            </form>
+          </>
+        )}
       </div>
     </main>
   )

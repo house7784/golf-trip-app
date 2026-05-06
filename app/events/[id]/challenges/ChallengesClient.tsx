@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Swords, X, UserCheck, Trophy, CheckCircle2, XCircle } from 'lucide-react'
 import {
   createChallenge,
+  deleteChallenge,
   respondToChallenge,
   setResult,
   witnessApprove,
@@ -48,6 +49,7 @@ type Props = {
   currentUserId: string
   participants: Participant[]
   challenges: Challenge[]
+  isOrganizer: boolean
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -90,15 +92,22 @@ function ChallengeRow({
   )
 }
 
-export default function ChallengesClient({ eventId, eventName, currentUserId, participants, challenges }: Props) {
+export default function ChallengesClient({ eventId, eventName, currentUserId, participants, challenges, isOrganizer }: Props) {
   const router = useRouter()
+  const [challengeRows, setChallengeRows] = useState(challenges)
+
+  useEffect(() => {
+    setChallengeRows(challenges)
+  }, [challenges])
 
   const profileMap: Record<string, Profile> = {}
   for (const p of participants) {
     if (p.profiles) profileMap[p.user_id] = p.profiles
   }
   const getName = (userId: string) => profileMap[userId]?.full_name ?? 'Golfer'
-  const otherParticipants = participants.filter((p) => p.user_id !== currentUserId)
+  const challengeTargets = isOrganizer
+    ? participants
+    : participants.filter((p) => p.user_id !== currentUserId)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedGolfer, setSelectedGolfer] = useState<Participant | null>(null)
@@ -171,12 +180,27 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
     })
   }
 
-  const pendingReceived = challenges.filter((c) => c.status === 'pending' && c.challenged_id === currentUserId)
-  const pendingSent = challenges.filter((c) => c.status === 'pending' && c.challenger_id === currentUserId)
-  const activeChallenges = challenges.filter((c) =>
+  const handleDelete = (challengeId: string) => {
+    if (!window.confirm('Delete this challenge? This cannot be undone.')) return
+    startTransition(async () => {
+      const result = await deleteChallenge(challengeId)
+      if (result?.error) {
+        window.alert(result.error)
+        return
+      }
+      setChallengeRows((prev) => prev.filter((challenge) => challenge.id !== challengeId))
+      setDetailOpen(false)
+      setDetailChallenge(null)
+      router.refresh()
+    })
+  }
+
+  const pendingReceived = challengeRows.filter((c) => c.status === 'pending' && c.challenged_id === currentUserId)
+  const pendingSent = challengeRows.filter((c) => c.status === 'pending' && c.challenger_id === currentUserId)
+  const activeChallenges = challengeRows.filter((c) =>
     ['accepted', 'awaiting_witness', 'result_set'].includes(c.status)
   )
-  const settledChallenges = challenges.filter((c) => ['completed', 'declined'].includes(c.status))
+  const settledChallenges = challengeRows.filter((c) => ['completed', 'declined'].includes(c.status))
 
   const c = detailChallenge
   const amChallenged = c?.challenged_id === currentUserId
@@ -196,7 +220,7 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
   return (
     <div className="space-y-6 pb-16">
       {/* Header */}
-      <div className="bg-club-navy text-white rounded-2xl p-6">
+      <div className="bg-club-navy text-Black rounded-2xl p-6">
         <Link
           href={`/events/${eventId}/dashboard`}
           className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-club-gold hover:text-white transition mb-4"
@@ -232,21 +256,21 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
       {/* Issue a Challenge */}
       <section className="space-y-3">
         <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400">Issue a Challenge</h2>
-        {otherParticipants.length === 0 ? (
+        {challengeTargets.length === 0 ? (
           <p className="text-sm text-gray-400 italic">No other golfers in this event yet.</p>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {otherParticipants.map((p) => (
+            {challengeTargets.map((p) => (
               <button
                 key={p.user_id}
                 onClick={() => openCreate(p)}
                 className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex flex-col items-center gap-2 h-28 hover:border-club-navy hover:shadow-md transition active:bg-gray-50"
               >
-                <div className="w-10 h-10 rounded-full bg-club-navy flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-10 h-10 rounded-full bg-club-navy flex items-center justify-center text-Black font-bold text-sm">
                   {(p.profiles?.full_name ?? 'G')[0].toUpperCase()}
                 </div>
                 <span className="text-xs font-bold text-club-navy text-center leading-tight line-clamp-2">
-                  {p.profiles?.full_name ?? 'Golfer'}
+                  {p.user_id === currentUserId ? `${p.profiles?.full_name ?? 'Golfer'} (Me)` : (p.profiles?.full_name ?? 'Golfer')}
                 </span>
               </button>
             ))}
@@ -314,7 +338,7 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
           >
             <div className="bg-club-navy p-4 flex justify-between items-center">
               <div>
-                <h2 className="font-serif text-lg font-bold text-white">Issue Challenge</h2>
+                <h2 className="font-serif text-lg font-bold text-Black">Issue Challenge</h2>
                 <p className="text-xs text-club-gold font-bold uppercase tracking-wider">
                   vs. {selectedGolfer.profiles?.full_name ?? 'Golfer'}
                 </p>
@@ -375,7 +399,7 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
               <button
                 onClick={handleCreate}
                 disabled={!description.trim() || !stakes.trim() || isPending}
-                className="w-full bg-club-navy text-white font-bold py-4 rounded-xl hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50 uppercase tracking-wider text-sm"
+                className="w-full bg-club-navy text-Black font-bold py-4 rounded-xl hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50 uppercase tracking-wider text-sm"
               >
                 {isPending ? 'Sending...' : '⚔️ Send Challenge'}
               </button>
@@ -396,7 +420,7 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
           >
             <div className="bg-club-navy p-4 flex justify-between items-center">
               <div className="space-y-1">
-                <h2 className="font-serif text-lg font-bold text-white">Challenge</h2>
+                <h2 className="font-serif text-lg font-bold text-Black">Challenge</h2>
                 <span
                   className={`inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${(STATUS_CONFIG[c.status] ?? { color: 'bg-gray-100 text-gray-600' }).color}`}
                 >
@@ -518,6 +542,16 @@ export default function ChallengesClient({ eventId, eventName, currentUserId, pa
                   className="w-full bg-club-navy text-white font-bold py-4 rounded-xl hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
                 >
                   <CheckCircle2 size={18} /> Mark as Settled
+                </button>
+              )}
+
+              {isOrganizer && (
+                <button
+                  onClick={() => handleDelete(c.id)}
+                  disabled={isPending}
+                  className="w-full border-2 border-red-200 text-red-700 font-bold py-3 rounded-xl hover:bg-red-50 transition disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
+                >
+                  <XCircle size={16} /> Delete Challenge
                 </button>
               )}
             </div>

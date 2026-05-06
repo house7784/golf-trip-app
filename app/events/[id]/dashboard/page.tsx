@@ -16,8 +16,9 @@ import CopyInviteButton from './CopyInviteButton'
 import TrashTalk from '../chat/TrashTalk'
 import CollapsibleLeaderboard from './CollapsibleLeaderboard'
 import { activateLeaderboard, deactivateLeaderboard, postAnnouncement } from './actions'
-import { calculateNetTotal, clampHandicap, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
+import { allocateStrokesByHole, calculateNetTotal, clampHandicap, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 import { getDefaultLeaderboardGroupSize, normalizeLeaderboardGroupSize } from '@/lib/game_modes'
+import { calculateStableford666TotalPoints, getStableford666Name } from '@/lib/stableford_666'
 
 const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
 
@@ -42,13 +43,13 @@ type RoundRow = {
 	id: string
 	date: string
 	mode_key?: string | null
-	course_data?: { holes?: CourseHole[]; leaderboard_group_size?: number } | null
+	course_data?: { holes?: CourseHole[]; leaderboard_group_size?: number; best_ball_matchplay?: boolean } | null
 }
 
 type ScoreRow = {
 	round_id: string
 	user_id: string
-	hole_scores: Record<string, number> | null
+	hole_scores: Record<string, any> | null
 }
 
 type PairingRow = {
@@ -63,6 +64,14 @@ type PairingRow = {
 type TeeTimeRow = {
 	id: string
 	pairings: PairingRow[]
+}
+
+type GroupEntry = {
+	key: string
+	label: string
+	memberNames: string[]
+	memberIds: string[]
+	teeTimeId?: string
 }
 
 function getDisplayName(profile?: { full_name?: string | null; email?: string | null } | null) {
@@ -200,6 +209,11 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
 	const roundById = new Map<string, RoundRow>()
 	sortedRounds.forEach((round) => roundById.set(round.id, round))
+	const holeScoresByRoundUser = new Map<string, Record<string, any> | null>()
+	scores.forEach((row) => {
+		holeScoresByRoundUser.set(`${row.round_id}:${row.user_id}`, row.hole_scores)
+	})
+	const strokeAllocationByRoundUser = new Map<string, Map<number, number>>()
 
 	const scoreMap = new Map<string, number>()
 	scores.forEach((row) => {
@@ -263,7 +277,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 			.eq('round_id', roundId)
 
 		const teeTimes = (teeTimesData as TeeTimeRow[] | null) || []
-		const groupedEntries: Array<{ key: string; label: string; memberNames: string[]; memberIds: string[] }> = []
+		const groupedEntries: GroupEntry[] = []
 		let groupNumber = 1
 
 		teeTimes.forEach((teeTime) => {
@@ -277,6 +291,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 						label: `Group ${groupNumber++}`,
 						memberNames: players.map((p) => getDisplayName(p.profiles)),
 						memberIds: players.map((p) => p.player_id as string),
+						teeTimeId: teeTime.id,
 					})
 				}
 				return
@@ -294,11 +309,182 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 					label: `Group ${groupNumber++}`,
 					memberNames: group.map((p) => getDisplayName(p.profiles)),
 					memberIds: group.map((p) => p.player_id as string),
+					teeTimeId: teeTime.id,
 				})
 			})
 		})
 
 		return groupedEntries.length > 0 ? groupedEntries : entries
+	}
+
+	const getNetHoleScore = (roundId: string, userId: string, holeNumber: number) => {
+		const holeScores = holeScoresByRoundUser.get(`${roundId}:${userId}`)
+		if (!holeScores) return null
+		const rawScore = Number(holeScores[String(holeNumber)])
+		if (!Number.isFinite(rawScore)) return null
+
+		const round = roundById.get(roundId)
+		const holes = (round?.course_data?.holes || []) as CourseHole[]
+		if (holes.length === 0) return rawScore
+
+		const cacheKey = `${roundId}:${userId}`
+		let allocation = strokeAllocationByRoundUser.get(cacheKey)
+		if (!allocation) {
+			const handicap = effectiveHandicapByUserId.get(userId) || 0
+			allocation = allocateStrokesByHole(holes, handicap, handicapApplication)
+			strokeAllocationByRoundUser.set(cacheKey, allocation)
+		}
+
+		return rawScore - (allocation.get(holeNumber) || 0)
+	}
+
+	const getBestBallHoleScore = (roundId: string, memberIds: string[], holeNumber: number) => {
+		let bestScore: number | null = null
+		memberIds.forEach((memberId) => {
+			const value = getNetHoleScore(roundId, memberId, holeNumber)
+			if (value === null) return
+			if (bestScore === null || value < bestScore) bestScore = value
+		})
+		return bestScore
+	}
+
+	const buildScrambleStrokeRows = (roundId: string, groupEntries: GroupEntry[]) =>
+		groupEntries
+			.map((entry) => {
+				let score: number | null = null
+				entry.memberIds.forEach((memberId) => {
+					const value = scoreMap.get(`${roundId}:${memberId}`)
+					if (value === undefined) return
+					if (score === null || value < score) score = value
+				})
+				return {
+					key: entry.key,
+					label: entry.label,
+					memberNames: entry.memberNames,
+					memberIds: entry.memberIds,
+					score,
+				}
+			})
+			.sort((a, b) => {
+				if (a.score === null && b.score === null) return a.label.localeCompare(b.label)
+				if (a.score === null) return 1
+				if (b.score === null) return -1
+				if (a.score !== b.score) return a.score - b.score
+				return a.label.localeCompare(b.label)
+			})
+
+	const buildBestBallStrokeRows = (round: RoundRow, groupEntries: GroupEntry[]) => {
+		const holes = (round.course_data?.holes || []) as CourseHole[]
+		return groupEntries
+			.map((entry) => {
+				if (holes.length === 0) {
+					return {
+						key: entry.key,
+						label: entry.label,
+						memberNames: entry.memberNames,
+						memberIds: entry.memberIds,
+						score: null,
+					}
+				}
+
+				let total = 0
+				let playedHoleCount = 0
+				holes.forEach((hole) => {
+					const holeScore = getBestBallHoleScore(round.id, entry.memberIds, hole.number)
+					if (holeScore === null) return
+					total += holeScore
+					playedHoleCount += 1
+				})
+
+				return {
+					key: entry.key,
+					label: entry.label,
+					memberNames: entry.memberNames,
+					memberIds: entry.memberIds,
+					score: playedHoleCount > 0 ? total : null,
+				}
+			})
+			.sort((a, b) => {
+				if (a.score === null && b.score === null) return a.label.localeCompare(b.label)
+				if (a.score === null) return 1
+				if (b.score === null) return -1
+				if (a.score !== b.score) return a.score - b.score
+				return a.label.localeCompare(b.label)
+			})
+	}
+
+	const buildBestBallMatchPlayRows = (round: RoundRow, groupEntries: GroupEntry[]) => {
+		const holes = (round.course_data?.holes || []) as CourseHole[]
+		const pointsByKey = new Map<string, number>()
+		groupEntries.forEach((entry) => pointsByKey.set(entry.key, 0))
+
+		const groupsByTeeTime = new Map<string, GroupEntry[]>()
+		groupEntries.forEach((entry) => {
+			if (!entry.teeTimeId) return
+			const teeTimeGroups = groupsByTeeTime.get(entry.teeTimeId) || []
+			teeTimeGroups.push(entry)
+			groupsByTeeTime.set(entry.teeTimeId, teeTimeGroups)
+		})
+
+		groupsByTeeTime.forEach((teeTimeGroups) => {
+			if (teeTimeGroups.length < 2) return
+			const [groupA, groupB] = teeTimeGroups
+
+			holes.forEach((hole) => {
+				const scoreA = getBestBallHoleScore(round.id, groupA.memberIds, hole.number)
+				const scoreB = getBestBallHoleScore(round.id, groupB.memberIds, hole.number)
+				if (scoreA === null || scoreB === null) return
+
+				if (scoreA < scoreB) {
+					pointsByKey.set(groupA.key, (pointsByKey.get(groupA.key) || 0) + 1)
+				} else if (scoreB < scoreA) {
+					pointsByKey.set(groupB.key, (pointsByKey.get(groupB.key) || 0) + 1)
+				} else {
+					pointsByKey.set(groupA.key, (pointsByKey.get(groupA.key) || 0) + 0.5)
+					pointsByKey.set(groupB.key, (pointsByKey.get(groupB.key) || 0) + 0.5)
+				}
+			})
+		})
+
+		return groupEntries
+			.map((entry) => ({
+				key: entry.key,
+				label: entry.label,
+				memberNames: entry.memberNames,
+				memberIds: entry.memberIds,
+				score: pointsByKey.get(entry.key) || 0,
+			}))
+			.sort((a, b) => {
+				if (a.score !== b.score) return b.score - a.score
+				return a.label.localeCompare(b.label)
+			})
+	}
+
+	const buildStableford666Rows = (round: RoundRow, groupEntries: GroupEntry[]) => {
+		const holes = (round.course_data?.holes || []) as CourseHole[]
+		return groupEntries
+			.map((entry) => {
+				const payload = entry.memberIds
+					.map((memberId) => holeScoresByRoundUser.get(`${round.id}:${memberId}`))
+					.find(Boolean) || null
+				const handicapByPlayerId = Object.fromEntries(
+					entry.memberIds.map((memberId) => [memberId, effectiveHandicapByUserId.get(memberId) || 0])
+				)
+				return {
+					key: entry.key,
+					label: entry.label,
+					memberNames: entry.memberNames,
+					memberIds: entry.memberIds,
+					score: payload ? calculateStableford666TotalPoints(payload, holes, handicapByPlayerId) : null,
+				}
+			})
+			.sort((a, b) => {
+				if (a.score === null && b.score === null) return a.label.localeCompare(b.label)
+				if (a.score === null) return 1
+				if (b.score === null) return -1
+				if (a.score !== b.score) return b.score - a.score
+				return a.label.localeCompare(b.label)
+			})
 	}
 
 	const buildRoundStandings = (roundId: string) => {
@@ -329,17 +515,23 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		})
 	}
 
-	const currentDayGroupSize = normalizeLeaderboardGroupSize(
-		Number(currentRound?.course_data?.leaderboard_group_size) ||
-			getDefaultLeaderboardGroupSize(currentRound?.mode_key)
-	)
+	const currentDayGroupSize = currentRound?.mode_key === 'stableford'
+		? 2
+		: normalizeLeaderboardGroupSize(
+			Number(currentRound?.course_data?.leaderboard_group_size) ||
+				getDefaultLeaderboardGroupSize(currentRound?.mode_key)
+		)
 
 	const currentDayFormatLabel =
-		currentDayGroupSize === 4
-			? '4-Person Teams'
-			: currentDayGroupSize === 2
-				? '2-Person Teams'
-				: 'Individual'
+		currentRound?.mode_key === 'stableford'
+			? getStableford666Name()
+			: currentRound?.mode_key === 'best_ball' && currentRound?.course_data?.best_ball_matchplay && currentDayGroupSize === 2
+				? '2-Person Match Play'
+				: currentDayGroupSize === 4
+					? '4-Person Teams'
+					: currentDayGroupSize === 2
+						? '2-Person Teams'
+						: 'Individual'
 
 	let currentDayLeaderboardRows: Array<{
 		key: string
@@ -351,32 +543,44 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
 	if (currentRound) {
 		const currentDayEntries = await buildPairingEntries(currentRound.id, currentDayGroupSize)
-		currentDayLeaderboardRows = currentDayEntries
-			.map((entry) => {
-				let total = 0
-				let scoredPlayers = 0
-				entry.memberIds.forEach((memberId) => {
-					const value = scoreMap.get(`${currentRound.id}:${memberId}`)
-					if (value !== undefined) {
-						total += value
-						scoredPlayers += 1
+
+		if (currentRound.mode_key === 'stableford') {
+			currentDayLeaderboardRows = buildStableford666Rows(currentRound, currentDayEntries)
+		} else if (currentRound.mode_key === 'best_ball') {
+			const bestBallMatchplay = Boolean(currentRound.course_data?.best_ball_matchplay) && currentDayGroupSize === 2
+			currentDayLeaderboardRows = bestBallMatchplay
+				? buildBestBallMatchPlayRows(currentRound, currentDayEntries)
+				: buildBestBallStrokeRows(currentRound, currentDayEntries)
+		} else if (currentRound.mode_key === 'scramble') {
+			currentDayLeaderboardRows = buildScrambleStrokeRows(currentRound.id, currentDayEntries)
+		} else {
+			currentDayLeaderboardRows = currentDayEntries
+				.map((entry) => {
+					let total = 0
+					let scoredPlayers = 0
+					entry.memberIds.forEach((memberId) => {
+						const value = scoreMap.get(`${currentRound.id}:${memberId}`)
+						if (value !== undefined) {
+							total += value
+							scoredPlayers += 1
+						}
+					})
+					return {
+						key: entry.key,
+						label: entry.label,
+						memberNames: entry.memberNames,
+						memberIds: entry.memberIds,
+						score: scoredPlayers > 0 ? total : null,
 					}
 				})
-				return {
-					key: entry.key,
-					label: entry.label,
-					memberNames: entry.memberNames,
-					memberIds: entry.memberIds,
-					score: scoredPlayers > 0 ? total : null,
-				}
-			})
-			.sort((a, b) => {
-				if (a.score === null && b.score === null) return a.label.localeCompare(b.label)
-				if (a.score === null) return 1
-				if (b.score === null) return -1
-				if (a.score !== b.score) return a.score - b.score
-				return a.label.localeCompare(b.label)
-			})
+				.sort((a, b) => {
+					if (a.score === null && b.score === null) return a.label.localeCompare(b.label)
+					if (a.score === null) return 1
+					if (b.score === null) return -1
+					if (a.score !== b.score) return a.score - b.score
+					return a.label.localeCompare(b.label)
+				})
+		}
 	}
 
 	const overallPoints = new Map<string, number>()

@@ -246,3 +246,42 @@ export async function markCompleted(challengeId: string) {
   revalidatePath(`/events/${challenge.event_id}/challenges`)
   return { success: true }
 }
+
+export async function deleteChallenge(challengeId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { data: challenge } = await supabase
+    .from('challenges')
+    .select('id, event_id')
+    .eq('id', challengeId)
+    .single()
+
+  if (!challenge) return { error: 'Challenge not found' }
+
+  const [{ data: participant }, { data: event }] = await Promise.all([
+    supabase
+      .from('event_participants')
+      .select('role')
+      .eq('event_id', challenge.event_id)
+      .eq('user_id', user.id)
+      .maybeSingle(),
+    supabase.from('events').select('created_by').eq('id', challenge.event_id).single(),
+  ])
+
+  const isOrganizer = participant?.role === 'organizer' || event?.created_by === user.id
+  if (!isOrganizer) return { error: 'Only organizers can delete challenges' }
+
+  const { error } = await supabase
+    .from('challenges')
+    .delete()
+    .eq('id', challengeId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/events/${challenge.event_id}/challenges`)
+  return { success: true }
+}

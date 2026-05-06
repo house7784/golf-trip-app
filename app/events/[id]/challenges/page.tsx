@@ -9,7 +9,7 @@ export default async function ChallengesPage({ params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: participantsData }, { data: challengesData }, { data: event }] = await Promise.all([
+  const [{ data: participantsData }, { data: challengesData }, { data: event }, { data: myParticipant }] = await Promise.all([
     supabase
       .from('event_participants')
       .select('id, user_id, profiles:user_id(id, full_name, email)')
@@ -21,10 +21,18 @@ export default async function ChallengesPage({ params }: { params: Promise<{ id:
       .order('created_at', { ascending: false }),
     supabase
       .from('events')
-      .select('id, name')
+      .select('id, name, created_by')
       .eq('id', id)
       .single(),
+    supabase
+      .from('event_participants')
+      .select('role')
+      .eq('event_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle(),
   ])
+
+  const isOrganizer = myParticipant?.role === 'organizer' || event?.created_by === user.id
 
   return (
     <ChallengesClient
@@ -33,6 +41,7 @@ export default async function ChallengesPage({ params }: { params: Promise<{ id:
       currentUserId={user.id}
       participants={(participantsData ?? []) as any[]}
       challenges={(challengesData ?? []) as any[]}
+      isOrganizer={isOrganizer}
     />
   )
 }

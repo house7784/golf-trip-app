@@ -19,11 +19,11 @@ export const GAME_MODES = {
     leaderboardGroupSize: 2,
   },
   stableford: {
-    name: 'Stableford',
-    description: 'Points are awarded based on your score relative to par (e.g., Par = 2 pts, Birdie = 3 pts). The goal is to get the highest score.',
+    name: '666 Drinking Stableford',
+    description: '1-6 scramble, 7-12 modified alt shot, 13-18 handicapped best ball with drinking and hitting bonus points. Highest points win.',
     icon: Target,
     scoringType: 'points',
-    leaderboardGroupSize: 1,
+    leaderboardGroupSize: 2,
   },
   bingo_bango_bongo: {
     name: 'Bingo Bango Bongo',
