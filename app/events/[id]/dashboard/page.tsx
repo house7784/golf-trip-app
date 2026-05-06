@@ -10,7 +10,8 @@ import {
 	MessageCircle,
 	Users,
 	Settings,
-	Gauge
+	Gauge,
+	BarChart3
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
 import TrashTalk from '../chat/TrashTalk'
@@ -268,6 +269,10 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		})
 
 	const overallEntries = hasTeams ? teamEntries : entries
+	const userIdToOverallEntryKey = new Map<string, string>()
+	overallEntries.forEach((entry) => {
+		entry.memberIds.forEach((memberId) => userIdToOverallEntryKey.set(memberId, entry.key))
+	})
 
 	const buildPairingEntries = async (roundId: string, groupSize: number) => {
 		if (groupSize === 1) return entries
@@ -585,12 +590,63 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
 	const overallPoints = new Map<string, number>()
 	overallEntries.forEach((entry) => overallPoints.set(entry.key, 0))
-	sortedRounds.forEach((round) => {
-		const standings = buildRoundStandings(round.id)
-			.filter((row) => row.score !== null)
-			.filter((row) => overallPoints.has(row.key))
+	for (const round of sortedRounds) {
 		const teamCount = overallEntries.length
-		if (teamCount === 0) return
+		if (teamCount === 0) continue
+
+		const courseData = (round.course_data || {}) as Record<string, any>
+		const groupSize = round.mode_key === 'stableford'
+			? 2
+			: normalizeLeaderboardGroupSize(
+				Number(courseData.leaderboard_group_size) || getDefaultLeaderboardGroupSize(round.mode_key)
+			)
+		const roundEntries = await buildPairingEntries(round.id, groupSize)
+
+		if (round.mode_key === 'best_ball' && Boolean(courseData.best_ball_matchplay) && groupSize === 2) {
+			const matchRows = buildBestBallMatchPlayRows(round, roundEntries)
+			const matchGroups = new Map<string, typeof matchRows>()
+			matchRows.forEach((row) => {
+				const teeTimeId = row.key.split('-group-')[0]
+				const rows = matchGroups.get(teeTimeId) || []
+				rows.push(row)
+				matchGroups.set(teeTimeId, rows)
+			})
+
+			const winnerPoints = Math.max(0, Number(courseData.match_winner_points ?? 0) || 0)
+			const tiePoints = Math.max(0, Number(courseData.match_tie_points ?? 0) || 0)
+
+			matchGroups.forEach((rows) => {
+				if (rows.length < 2) return
+				const [rowA, rowB] = rows
+				if (rowA.score === null || rowB.score === null) return
+
+				const targetsA = new Set(rowA.memberIds.map((memberId) => userIdToOverallEntryKey.get(memberId)).filter(Boolean) as string[])
+				const targetsB = new Set(rowB.memberIds.map((memberId) => userIdToOverallEntryKey.get(memberId)).filter(Boolean) as string[])
+
+				if (rowA.score > rowB.score) {
+					targetsA.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + winnerPoints))
+				} else if (rowB.score > rowA.score) {
+					targetsB.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + winnerPoints))
+				} else {
+					targetsA.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + tiePoints))
+					targetsB.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + tiePoints))
+				}
+			})
+			continue
+		}
+
+		const roundRows = round.mode_key === 'stableford'
+			? buildStableford666Rows(round, roundEntries)
+			: round.mode_key === 'best_ball'
+				? buildBestBallStrokeRows(round, roundEntries)
+				: round.mode_key === 'scramble'
+					? buildScrambleStrokeRows(round.id, roundEntries)
+					: buildRoundStandings(round.id)
+
+		const standings = roundRows.filter((row) => row.score !== null)
+		const positionPoints = (courseData.position_points || {}) as Record<string, number>
+		const hasConfiguredPoints = Object.keys(positionPoints).length > 0
+
 		let rank = 0
 		let previousScore: number | null = null
 		standings.forEach((row, index) => {
@@ -598,9 +654,17 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 				rank = index + 1
 				previousScore = row.score
 			}
-			overallPoints.set(row.key, (overallPoints.get(row.key) || 0) + (teamCount - rank + 1))
+			const tripPts = hasConfiguredPoints
+				? (positionPoints[String(rank)] ?? 0)
+				: (teamCount - rank + 1)
+			const targetKeys = new Set(
+				row.memberIds
+					.map((memberId) => userIdToOverallEntryKey.get(memberId))
+					.filter(Boolean) as string[]
+			)
+			targetKeys.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + tripPts))
 		})
-	})
+	}
 
 	const overallLeaderboard = overallEntries
 		.map((entry) => ({
@@ -782,8 +846,10 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 							<Link href={`/events/${id}/handicaps`} className="bg-gray-200 p-3 rounded text-center">
 								<Gauge className="mx-auto mb-1 text-gray-600" size={20} />
 								<span className="text-[10px] font-bold text-gray-600">Handicaps</span>
-							</Link>
-						</div>
+							</Link>						<Link href={`/events/${id}/scoring`} className="bg-gray-200 p-3 rounded text-center">
+							<BarChart3 className="mx-auto mb-1 text-gray-600" size={20} />
+							<span className="text-[10px] font-bold text-gray-600">Scoring</span>
+						</Link>						</div>
 					</details>
 				)}
 
