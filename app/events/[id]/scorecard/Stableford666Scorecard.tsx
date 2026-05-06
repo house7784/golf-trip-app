@@ -6,6 +6,7 @@ import { Minus, Plus, Save } from 'lucide-react'
 import type { CourseHole } from '@/lib/handicap'
 import {
   buildStableford666Payload,
+  getStableford666Allocations,
   calculateStableford666HoleSummary,
   calculateStableford666TotalPoints,
   getStableford666Data,
@@ -59,6 +60,11 @@ export default function Stableford666Scorecard({
   const totalPoints = useMemo(
     () => calculateStableford666TotalPoints({ _stableford666: data }, holes, handicapByPlayerId),
     [data, holes, handicapByPlayerId]
+  )
+
+  const allocationsByPlayer = useMemo(
+    () => getStableford666Allocations(holes, handicapByPlayerId),
+    [holes, handicapByPlayerId]
   )
 
   const updateHole = (holeNumber: number, patch: Record<string, any>) => {
@@ -171,7 +177,9 @@ export default function Stableford666Scorecard({
                       <span className="block text-[11px] font-bold uppercase tracking-wider text-club-text/60 truncate">
                         {player.name}
                       </span>
-                      <span className="block text-[10px] text-gray-400 mb-1">Handicap / 3: {(player.handicap / 3).toFixed(1)}</span>
+                      <span className="block text-[10px] text-gray-400 mb-1">
+                        Handicap / 3: {(player.handicap / 3).toFixed(1)} • Strokes here: {allocationsByPlayer.get(player.id)?.get(hole.number) || 0}
+                      </span>
                       <input
                         type="number"
                         inputMode="numeric"

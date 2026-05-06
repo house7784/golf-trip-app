@@ -389,7 +389,7 @@ export default async function PlayerScorecardsPage({
                               <span className="font-semibold text-club-gold">Pts {summary.totalPoints}</span>
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                              {playerName}: {myScore ?? '--'} • {partnerName}: {partnerScore ?? '--'} • Drinks B/C/S: {holeData.beers || 0}/{holeData.cocktails || 0}/{holeData.shots || 0}
+                              {playerName}: {myScore ?? '--'} • {partnerName}: {partnerScore ?? '--'} • Drinks B/C/S: {holeData.beers || 0}/{holeData.cocktails || 0}/{holeData.shots || 0} • Bonuses: {holeData.fairwayHit ? 'FWY ' : ''}{holeData.gir ? 'GIR ' : ''}{holeData.onePutt ? '1Putt ' : ''}{holeData.chipIn ? 'ChipIn' : ''}
                             </div>
                           </div>
                         )

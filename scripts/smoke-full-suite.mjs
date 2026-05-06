@@ -104,41 +104,112 @@ function makeStablefordPayload(pairUserIds, holes, delta) {
   const holesData = {}
   const payload = { _stableford666: { holes: holesData } }
 
+  const customTeamScenarios = {
+    1: { teamScore: 3, beers: 1, cocktails: 0, shots: 0, fairwayHit: true, gir: true, onePutt: true, chipIn: false },
+    2: { teamScore: 2, beers: 0, cocktails: 1, shots: 0, fairwayHit: true, gir: true, onePutt: false, chipIn: false },
+    3: { teamScore: 1, beers: 0, cocktails: 0, shots: 1, fairwayHit: false, gir: true, onePutt: true, chipIn: false },
+    4: { teamScore: 4, beers: 1, cocktails: 1, shots: 0, fairwayHit: true, gir: false, onePutt: false, chipIn: true },
+    5: { teamScore: 2, beers: 1, cocktails: 0, shots: 1, fairwayHit: true, gir: true, onePutt: false, chipIn: false },
+    6: { teamScore: 3, beers: 0, cocktails: 1, shots: 1, fairwayHit: true, gir: false, onePutt: true, chipIn: false },
+    7: { teamScore: 4, beers: 1, cocktails: 1, shots: 1, fairwayHit: true, gir: true, onePutt: true, chipIn: true },
+    8: { teamScore: 3, beers: 0, cocktails: 0, shots: 0, fairwayHit: false, gir: false, onePutt: false, chipIn: false },
+    9: { teamScore: 4, beers: 1, cocktails: 0, shots: 0, fairwayHit: true, gir: true, onePutt: false, chipIn: false },
+    10: { teamScore: 3, beers: 0, cocktails: 1, shots: 0, fairwayHit: true, gir: true, onePutt: true, chipIn: false },
+    11: { teamScore: 4, beers: 0, cocktails: 0, shots: 1, fairwayHit: true, gir: false, onePutt: false, chipIn: false },
+    12: { teamScore: 3, beers: 1, cocktails: 1, shots: 1, fairwayHit: true, gir: true, onePutt: true, chipIn: false },
+  }
+
+  const customBestBallScenarios = {
+    13: { p1: 3, p2: 3, beers: 1, cocktails: 0, shots: 0, fairwayHit: true, gir: true, onePutt: true, chipIn: false },
+    14: { p1: 2, p2: 4, beers: 0, cocktails: 1, shots: 0, fairwayHit: true, gir: true, onePutt: false, chipIn: false },
+    15: { p1: 1, p2: 1, beers: 0, cocktails: 0, shots: 1, fairwayHit: false, gir: true, onePutt: true, chipIn: false },
+    16: { p1: 4, p2: 3, beers: 1, cocktails: 0, shots: 0, fairwayHit: true, gir: true, onePutt: true, chipIn: false },
+    17: { p1: 2, p2: 3, beers: 0, cocktails: 1, shots: 0, fairwayHit: true, gir: true, onePutt: false, chipIn: true },
+    18: { p1: 3, p2: 2, beers: 1, cocktails: 1, shots: 1, fairwayHit: true, gir: true, onePutt: true, chipIn: false },
+  }
+
   for (const hole of holes) {
     if (hole.number <= 12) {
-      const teamScore = Math.max(1, hole.par - 1 + ((hole.number + delta) % 2))
+      const teamScenario = customTeamScenarios[hole.number]
+      const fallbackTeamScore = Math.max(1, hole.par - 1 + ((hole.number + delta) % 2))
+      const teamScore = teamScenario?.teamScore ?? fallbackTeamScore
       holesData[String(hole.number)] = {
         teamScore,
-        beers: hole.number % 6 === 0 ? 1 : 0,
-        cocktails: hole.number % 9 === 0 ? 1 : 0,
-        shots: 0,
-        fairwayHit: hole.par >= 4,
-        gir: hole.number % 2 === 0,
-        onePutt: hole.number % 3 === 0,
-        chipIn: false,
+        beers: teamScenario?.beers ?? (hole.number % 6 === 0 ? 1 : 0),
+        cocktails: teamScenario?.cocktails ?? (hole.number % 9 === 0 ? 1 : 0),
+        shots: teamScenario?.shots ?? 0,
+        fairwayHit: teamScenario?.fairwayHit ?? (hole.par >= 4),
+        gir: teamScenario?.gir ?? (hole.number % 2 === 0),
+        onePutt: teamScenario?.onePutt ?? (hole.number % 3 === 0),
+        chipIn: teamScenario?.chipIn ?? false,
       }
       payload[String(hole.number)] = teamScore
     } else {
-      const p1 = Math.max(1, hole.par + ((hole.number + delta) % 2) - 1)
-      const p2 = Math.max(1, hole.par + (((hole.number + delta + 1) % 2) - 1))
+      const bestBallScenario = customBestBallScenarios[hole.number]
+      const p1 = bestBallScenario?.p1 ?? Math.max(1, hole.par + ((hole.number + delta) % 2) - 1)
+      const p2 = bestBallScenario?.p2 ?? Math.max(1, hole.par + (((hole.number + delta + 1) % 2) - 1))
       holesData[String(hole.number)] = {
         playerScores: {
           [u1]: p1,
           [u2]: p2,
         },
-        beers: 0,
-        cocktails: 0,
-        shots: hole.number === 18 ? 1 : 0,
-        fairwayHit: hole.par >= 4,
-        gir: true,
-        onePutt: hole.number % 2 === 1,
-        chipIn: hole.number === 17,
+        beers: bestBallScenario?.beers ?? 0,
+        cocktails: bestBallScenario?.cocktails ?? 0,
+        shots: bestBallScenario?.shots ?? (hole.number === 18 ? 1 : 0),
+        fairwayHit: bestBallScenario?.fairwayHit ?? (hole.par >= 4),
+        gir: bestBallScenario?.gir ?? true,
+        onePutt: bestBallScenario?.onePutt ?? (hole.number % 2 === 1),
+        chipIn: bestBallScenario?.chipIn ?? (hole.number === 17),
       }
       payload[String(hole.number)] = Math.min(p1, p2)
     }
   }
 
   return payload
+}
+
+function inspectStablefordPayload(payload, holes) {
+  const data = payload?._stableford666?.holes || {}
+  const holesByNumber = new Map(holes.map((h) => [h.number, h]))
+
+  const counts = {
+    beerHoles: 0,
+    cocktailHoles: 0,
+    shotHoles: 0,
+    doubleAceBestBallHoles: 0,
+    bothBirdieBestBallHoles: 0,
+    fairwayAndEagleHoles: 0,
+  }
+
+  for (const [holeKey, holeData] of Object.entries(data)) {
+    const holeNumber = Number(holeKey)
+    const hole = holesByNumber.get(holeNumber)
+    if (!hole) continue
+
+    if ((Number(holeData.beers) || 0) > 0) counts.beerHoles += 1
+    if ((Number(holeData.cocktails) || 0) > 0) counts.cocktailHoles += 1
+    if ((Number(holeData.shots) || 0) > 0) counts.shotHoles += 1
+
+    const playerScores = holeData.playerScores || {}
+    const numericScores = Object.values(playerScores)
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v))
+
+    if (numericScores.length >= 2 && numericScores.every((s) => s === 1)) {
+      counts.doubleAceBestBallHoles += 1
+    }
+
+    if (numericScores.length >= 2 && numericScores.every((s) => s === hole.par - 1)) {
+      counts.bothBirdieBestBallHoles += 1
+    }
+
+    const bestScore = numericScores.length > 0 ? Math.min(...numericScores) : null
+    if (holeData.fairwayHit && bestScore !== null && bestScore <= hole.par - 2) {
+      counts.fairwayAndEagleHoles += 1
+    }
+  }
+
+  return counts
 }
 
 function makeScrambleHoleScores(holes, groupIndex) {
@@ -177,6 +248,14 @@ function chunk(list, size) {
 
 async function main() {
   const keepData = process.argv.includes('--keep')
+  const organizerUserIdArg =
+    process.argv.find((arg) => arg.startsWith('--organizer-user-id='))?.split('=')[1] ||
+    process.env.SMOKE_ORGANIZER_USER_ID ||
+    null
+  const organizerEmailArg =
+    process.argv.find((arg) => arg.startsWith('--organizer-email='))?.split('=')[1] ||
+    process.env.SMOKE_ORGANIZER_EMAIL ||
+    null
   const url = requiredEnv('NEXT_PUBLIC_SUPABASE_URL')
   const serviceRole = requiredEnv('SUPABASE_SERVICE_ROLE_KEY')
 
@@ -226,6 +305,25 @@ async function main() {
     return { userId, email, name: `Smoke ${label}` }
   }
 
+  async function resolveExternalOrganizerId() {
+    if (organizerUserIdArg) {
+      return organizerUserIdArg
+    }
+
+    if (organizerEmailArg) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', organizerEmailArg)
+        .maybeSingle()
+
+      if (error) throw new Error(`Failed to resolve organizer by email: ${error.message}`)
+      return data?.id || null
+    }
+
+    return null
+  }
+
   try {
     const players = []
     for (let i = 0; i < 16; i++) {
@@ -234,7 +332,8 @@ async function main() {
       players.push(await createDummyUser(label, handicapIndex))
     }
 
-    const organizerId = players[0].userId
+    const externalOrganizerId = await resolveExternalOrganizerId()
+    const organizerId = externalOrganizerId || players[0].userId
 
     const { data: event, error: eventError } = await supabase
       .from('events')
@@ -257,6 +356,15 @@ async function main() {
       event_handicap: Math.min(24, 4 + index),
     }))
 
+    if (externalOrganizerId && !participants.some((row) => row.user_id === externalOrganizerId)) {
+      participants.push({
+        event_id: eventId,
+        user_id: externalOrganizerId,
+        role: 'organizer',
+        event_handicap: 0,
+      })
+    }
+
     const { error: participantError } = await supabase
       .from('event_participants')
       .insert(participants)
@@ -266,21 +374,21 @@ async function main() {
     const roundRows = [
       {
         event_id: eventId,
-        date: isoDateOffset(0),
+        date: isoDateOffset(1),
         mode_key: 'scramble',
         course_name: 'Smoke Course Day 1',
         course_data: { holes, leaderboard_group_size: 4 },
       },
       {
         event_id: eventId,
-        date: isoDateOffset(1),
+        date: isoDateOffset(2),
         mode_key: 'best_ball',
         course_name: 'Smoke Course Day 2',
         course_data: { holes, leaderboard_group_size: 2 },
       },
       {
         event_id: eventId,
-        date: isoDateOffset(2),
+        date: isoDateOffset(0),
         mode_key: 'stableford',
         course_name: 'Smoke Course Day 3',
         course_data: { holes, leaderboard_group_size: 2 },
@@ -399,10 +507,33 @@ async function main() {
       },
       {
         event_id: eventId,
+        challenger_id: players[1].userId,
+        challenged_id: players[0].userId,
+        witness_id: players[3].userId,
+        description: 'Most fairways hit in round 3',
+        stakes: 'Buys airport beers',
+        status: 'pending',
+        witness_approved: false,
+        loser_completed: false,
+      },
+      {
+        event_id: eventId,
         challenger_id: players[3].userId,
         challenged_id: players[4].userId,
         description: 'Lowest net on back 9',
         stakes: '$20',
+        status: 'accepted',
+        accepted_at: new Date().toISOString(),
+        witness_approved: false,
+        loser_completed: false,
+      },
+      {
+        event_id: eventId,
+        challenger_id: players[4].userId,
+        challenged_id: players[5].userId,
+        witness_id: players[6].userId,
+        description: 'Lowest total on par 5s only',
+        stakes: 'Winner chooses music tonight',
         status: 'accepted',
         accepted_at: new Date().toISOString(),
         witness_approved: false,
@@ -424,6 +555,20 @@ async function main() {
       },
       {
         event_id: eventId,
+        challenger_id: players[6].userId,
+        challenged_id: players[7].userId,
+        witness_id: players[8].userId,
+        description: 'Most net birdies in round 2',
+        stakes: '$15',
+        status: 'result_set',
+        accepted_at: new Date().toISOString(),
+        winner_id: players[7].userId,
+        result_set_at: new Date().toISOString(),
+        witness_approved: false,
+        loser_completed: false,
+      },
+      {
+        event_id: eventId,
         challenger_id: players[8].userId,
         challenged_id: players[9].userId,
         description: 'Better gross over holes 13-18',
@@ -431,6 +576,21 @@ async function main() {
         status: 'completed',
         accepted_at: new Date().toISOString(),
         winner_id: players[9].userId,
+        result_set_at: new Date().toISOString(),
+        witness_approved: true,
+        loser_completed: true,
+        completed_at: new Date().toISOString(),
+      },
+      {
+        event_id: eventId,
+        challenger_id: players[9].userId,
+        challenged_id: players[10].userId,
+        witness_id: players[11].userId,
+        description: 'Least putts in final round',
+        stakes: 'Loser buys hats in pro shop',
+        status: 'completed',
+        accepted_at: new Date().toISOString(),
+        winner_id: players[10].userId,
         result_set_at: new Date().toISOString(),
         witness_approved: true,
         loser_completed: true,
@@ -448,12 +608,12 @@ async function main() {
       },
       {
         event_id: eventId,
-        challenger_id: players[12].userId,
-        challenged_id: players[13].userId,
-        witness_id: players[14].userId,
-        description: 'No 3-putts challenge',
-        stakes: 'Caddie duty next round',
-        status: 'pending',
+        challenger_id: players[11].userId,
+        challenged_id: players[12].userId,
+        witness_id: players[13].userId,
+        description: 'Closest to the pin on hole 15',
+        stakes: 'Bottle of bourbon',
+        status: 'declined',
         witness_approved: false,
         loser_completed: false,
       },
@@ -468,12 +628,12 @@ async function main() {
     insertedChallengeIds.push(...(insertedChallenges || []).map((row) => row.id))
 
     const chatRows = []
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 18; i++) {
       const player = players[i % players.length]
       chatRows.push({
         event_id: eventId,
         user_id: player.userId,
-        content: `Smoke chat ${i + 1}: group ${Math.floor(i / 6) + 1} checking in.`,
+        content: `Smoke chat ${i + 1}: day ${Math.floor(i / 6) + 1} check-in and banter.`,
       })
     }
 
@@ -519,17 +679,57 @@ async function main() {
 
     const stablefordRowsFromDb = verificationScores.filter((row) => row.round_id === stablefordRound.id)
     const stablefordPairPoints = []
+    const stablefordSummary = {
+      beerHoles: 0,
+      cocktailHoles: 0,
+      shotHoles: 0,
+      doubleAceBestBallHoles: 0,
+      bothBirdieBestBallHoles: 0,
+      fairwayAndEagleHoles: 0,
+    }
     stablefordPairs.forEach((pair) => {
       const payload = stablefordRowsFromDb.find((row) => row.user_id === pair[0])?.hole_scores
       if (!payload) {
         throw new Error('Missing stableford payloads in verification data')
       }
       stablefordPairPoints.push(calculateStablefordPayloadPoints(payload, holes))
+      const counts = inspectStablefordPayload(payload, holes)
+      Object.keys(stablefordSummary).forEach((key) => {
+        stablefordSummary[key] += counts[key] || 0
+      })
     })
 
     if (!stablefordPairPoints.every((value) => Number.isFinite(value) && value > 0)) {
       throw new Error('Stableford points did not compute as expected')
     }
+
+    if (stablefordSummary.beerHoles === 0 || stablefordSummary.cocktailHoles === 0 || stablefordSummary.shotHoles === 0) {
+      throw new Error('Stableford payload is missing one or more drink types (beer/cocktail/shot)')
+    }
+
+    if (stablefordSummary.doubleAceBestBallHoles === 0) {
+      throw new Error('Stableford payload missing scenario where both partners make a hole-in-one')
+    }
+
+    if (stablefordSummary.bothBirdieBestBallHoles === 0) {
+      throw new Error('Stableford payload missing scenario where both partners make birdie')
+    }
+
+    if (stablefordSummary.fairwayAndEagleHoles === 0) {
+      throw new Error('Stableford payload missing fairway + eagle scenario')
+    }
+
+    const challengeStateCounts = challengeRows.reduce((acc, row) => {
+      const status = row.status || 'unknown'
+      acc[status] = (acc[status] || 0) + 1
+      return acc
+    }, {})
+
+    ;['pending', 'accepted', 'result_set', 'completed', 'declined'].forEach((status) => {
+      if ((challengeStateCounts[status] || 0) < 2) {
+        throw new Error(`Expected at least 2 challenges in status '${status}', found ${challengeStateCounts[status] || 0}`)
+      }
+    })
 
     const { count: challengeCount, error: challengeVerifyError } = await supabase
       .from('challenges')
@@ -558,10 +758,19 @@ async function main() {
     console.log(`Scramble groups: ${scrambleGroups.length} foursomes`)
     console.log(`Best Ball pair totals (sample): ${bestBallTotals.slice(0, 4).join(', ')}`)
     console.log(`666 Stableford points (sample): ${stablefordPairPoints.slice(0, 4).join(', ')}`)
+    console.log(
+      `Smoke summary: challenges[pending=${challengeStateCounts.pending || 0}, accepted=${challengeStateCounts.accepted || 0}, result_set=${challengeStateCounts.result_set || 0}, completed=${challengeStateCounts.completed || 0}, declined=${challengeStateCounts.declined || 0}]`
+    )
+    console.log(
+      `Smoke summary: 666 combos[beerHoles=${stablefordSummary.beerHoles}, cocktailHoles=${stablefordSummary.cocktailHoles}, shotHoles=${stablefordSummary.shotHoles}, bothAce=${stablefordSummary.doubleAceBestBallHoles}, bothBirdie=${stablefordSummary.bothBirdieBestBallHoles}, fairwayPlusEagle=${stablefordSummary.fairwayAndEagleHoles}]`
+    )
     console.log(`Challenges seeded: ${challengeRows.length}`)
     console.log(`Trash talk messages seeded: ${insertedChatCount}`)
     console.log(`Login password for all smoke users: SmokePass123!`)
     console.log(`Organizer login: ${players[0].email}`)
+    if (organizerUserIdArg || organizerEmailArg) {
+      console.log(`External organizer included: ${organizerUserIdArg || organizerEmailArg}`)
+    }
     console.log(keepData ? 'Keeping seeded data (--keep enabled).' : 'Seeded data will be cleaned up.')
   } finally {
     if (!keepData) {
