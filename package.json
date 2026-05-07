@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:smoke": "node scripts/smoke-full-suite.mjs"
+    "test:smoke": "node scripts/smoke-full-suite.mjs",
+    "test:smoke:24": "node scripts/smoke-24-two-team.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

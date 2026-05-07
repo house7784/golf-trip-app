@@ -75,6 +75,16 @@ type GroupEntry = {
 	teeTimeId?: string
 }
 
+type OverallContribution = {
+	roundId: string
+	roundDate: string | null
+	formatLabel: string
+	groupLabel: string
+	memberNames: string[]
+	points: number
+	note?: string
+}
+
 function getDisplayName(profile?: { full_name?: string | null; email?: string | null } | null) {
 	return profile?.full_name || 'Golfer'
 }
@@ -659,7 +669,37 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 	}
 
 	const overallPoints = new Map<string, number>()
-	overallEntries.forEach((entry) => overallPoints.set(entry.key, 0))
+	const overallContributions = new Map<string, OverallContribution[]>()
+	overallEntries.forEach((entry) => {
+		overallPoints.set(entry.key, 0)
+		overallContributions.set(entry.key, [])
+	})
+
+	const recordOverallContribution = (
+		targetKeys: Set<string>,
+		round: RoundRow,
+		formatLabel: string,
+		groupLabel: string,
+		memberNames: string[],
+		points: number,
+		note?: string
+	) => {
+		if (points <= 0) return
+		targetKeys.forEach((key) => {
+			const existing = overallContributions.get(key) || []
+			existing.push({
+				roundId: round.id,
+				roundDate: round.date || null,
+				formatLabel,
+				groupLabel,
+				memberNames,
+				points,
+				note,
+			})
+			overallContributions.set(key, existing)
+		})
+	}
+
 	for (const round of sortedRounds) {
 		const teamCount = overallEntries.length
 		if (teamCount === 0) continue
@@ -670,6 +710,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 			: normalizeLeaderboardGroupSize(
 				Number(courseData.leaderboard_group_size) || getDefaultLeaderboardGroupSize(round.mode_key)
 			)
+		const formatLabel = getRoundFormatLabel(round, groupSize)
 		const roundEntries = await buildPairingEntries(round.id, groupSize)
 
 		if (round.mode_key === 'best_ball' && Boolean(courseData.best_ball_matchplay) && groupSize === 2) {
@@ -695,11 +736,15 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
 				if (rowA.score > rowB.score) {
 					targetsA.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + winnerPoints))
+					recordOverallContribution(targetsA, round, formatLabel, rowA.label, rowA.memberNames, winnerPoints, `Win vs ${rowB.label}`)
 				} else if (rowB.score > rowA.score) {
 					targetsB.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + winnerPoints))
+					recordOverallContribution(targetsB, round, formatLabel, rowB.label, rowB.memberNames, winnerPoints, `Win vs ${rowA.label}`)
 				} else {
 					targetsA.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + tiePoints))
 					targetsB.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + tiePoints))
+					recordOverallContribution(targetsA, round, formatLabel, rowA.label, rowA.memberNames, tiePoints, `Halved vs ${rowB.label}`)
+					recordOverallContribution(targetsB, round, formatLabel, rowB.label, rowB.memberNames, tiePoints, `Halved vs ${rowA.label}`)
 				}
 			})
 			continue
@@ -733,8 +778,22 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 					.filter(Boolean) as string[]
 			)
 			targetKeys.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + tripPts))
+			recordOverallContribution(targetKeys, round, formatLabel, row.label, row.memberNames, tripPts, `Finished #${rank}`)
 		})
 	}
+
+	const overallContributionRows = Object.fromEntries(
+		Array.from(overallContributions.entries()).map(([key, items]) => [
+			key,
+			items.sort((a, b) => {
+				const aDate = a.roundDate || ''
+				const bDate = b.roundDate || ''
+				if (aDate !== bDate) return aDate.localeCompare(bDate)
+				if (a.points !== b.points) return b.points - a.points
+				return a.groupLabel.localeCompare(b.groupLabel)
+			}),
+		])
+	)
 
 	const overallLeaderboard = overallEntries
 		.map((entry) => ({
@@ -943,6 +1002,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 					eventId={id}
 					dailyRounds={dailyRoundLeaderboards}
 					overallRows={overallLeaderboard}
+					overallContributions={overallContributionRows}
 					currentRoundId={currentRound?.id ?? null}
 				/>
 
