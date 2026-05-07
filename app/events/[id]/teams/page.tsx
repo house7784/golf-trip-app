@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { ChevronLeft, Crown, Users } from 'lucide-react'
-import { updateTeamStructure, assignPlayer, setCaptain } from './actions'
+import { updateTeamStructure, assignPlayer, renameTeam, setCaptain } from './actions'
 
 type ParticipantRow = {
   id: string
@@ -256,9 +256,30 @@ export default async function TeamsPage({ params }: { params: Promise<{ id: stri
 
                   return (
                     <div key={team.id} className="bg-white border-t-4 border-club-navy p-4 rounded-sm shadow-md h-fit">
-                      <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
-                        <h3 className="font-serif text-lg font-bold text-club-navy">{team.name}</h3>
-                        {team.captain_id ? <Crown size={16} className="text-club-gold fill-club-gold" /> : null}
+                      <div className="mb-4 border-b border-gray-100 pb-2">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-serif text-lg font-bold text-club-navy">{team.name}</h3>
+                          {team.captain_id ? <Crown size={16} className="text-club-gold fill-club-gold" /> : null}
+                        </div>
+                        <form
+                          action={async (formData) => {
+                            'use server'
+                            const nextName = formData.get('name') as string
+                            await renameTeam(team.id, nextName, id)
+                          }}
+                          className="mt-2 flex gap-2"
+                        >
+                          <input
+                            type="text"
+                            name="name"
+                            defaultValue={team.name}
+                            maxLength={40}
+                            className="flex-1 text-xs p-2 border border-gray-300 rounded bg-white text-club-navy"
+                          />
+                          <button className="bg-club-navy text-white text-[10px] font-bold px-3 py-2 rounded shadow-sm hover:bg-opacity-90 uppercase tracking-wide">
+                            Rename
+                          </button>
+                        </form>
                       </div>
 
                       {members.map((participant) => (

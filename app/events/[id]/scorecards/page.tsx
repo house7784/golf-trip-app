@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
+import { allocateStrokesByHole, calculateNetTotal, floorNetHoleScore, type HandicapApplicationMode } from '@/lib/handicap'
 import { calculateStableford666TotalPoints, getStableford666Segment, getStableford666SegmentLabel } from '@/lib/stableford_666'
 
 function getDisplayName(profile?: { full_name?: string | null; email?: string | null } | null) {
@@ -10,6 +11,28 @@ function getDisplayName(profile?: { full_name?: string | null; email?: string | 
 function totalScore(holeScores: Record<string, number> | null | undefined) {
   if (!holeScores) return 0
   return Object.values(holeScores).reduce((sum, value) => sum + (Number(value) || 0), 0)
+}
+
+function numericHoleScore(holeScores: Record<string, any> | null | undefined, holeNumber: number) {
+  const value = Number(holeScores?.[String(holeNumber)] ?? holeScores?.[holeNumber])
+  return Number.isFinite(value) ? value : null
+}
+
+function scoreMarkerClass(score: number | null, par: number) {
+  if (score === null) return null
+  const delta = score - par
+  if (delta === -1) return 'inline-flex min-w-6 h-6 items-center justify-center rounded-full border-2 border-club-navy px-1 leading-none'
+  if (delta <= -2) return 'inline-flex min-w-6 h-6 items-center justify-center rounded-full border-2 border-club-navy ring-1 ring-club-navy/70 ring-offset-1 px-1 leading-none'
+  if (delta === 1) return 'inline-flex min-w-6 h-6 items-center justify-center rounded-sm border-2 border-club-navy px-1 leading-none'
+  if (delta >= 2) return 'inline-flex min-w-6 h-6 items-center justify-center rounded-sm border-2 border-club-navy ring-1 ring-club-navy/70 ring-offset-1 px-1 leading-none'
+  return null
+}
+
+function renderMarkedScore(score: number | null, par: number) {
+  if (score === null) return '--'
+  const markerClass = scoreMarkerClass(score, par)
+  if (!markerClass) return score
+  return <span className={markerClass}>{score}</span>
 }
 
 export default async function PairScorecardsPage({
@@ -89,6 +112,17 @@ export default async function PairScorecardsPage({
     )
   }
 
+  const { data: eventSettings } = await supabase
+    .from('events')
+    .select('handicap_application')
+    .eq('id', id)
+    .maybeSingle()
+
+  const handicapApplication: HandicapApplicationMode =
+    eventSettings?.handicap_application === 'par3_one_then_next_hardest'
+      ? 'par3_one_then_next_hardest'
+      : 'standard'
+
   const { data: participantRows } = await supabase
     .from('event_participants')
     .select('user_id, event_handicap, profiles:user_id(full_name, email, handicap_index)')
@@ -163,8 +197,8 @@ export default async function PairScorecardsPage({
                     {holes.map((hole: any) => {
                       const segment = getStableford666Segment(hole.number)
                       const segmentLabel = getStableford666SegmentLabel(hole.number)
-                      const score1 = scores1?.[hole.number] ?? '--'
-                      const score2 = scores2?.[hole.number] ?? '--'
+                      const numericScore1 = numericHoleScore(scores1, hole.number)
+                      const numericScore2 = numericHoleScore(scores2, hole.number)
                       
                       return (
                         <div key={hole.number} className="px-4 py-3">
@@ -179,17 +213,17 @@ export default async function PairScorecardsPage({
                             {segment === 'scramble' || segment === 'modified_alt_shot' ? (
                               <div className="flex-1">
                                 <span className="text-gray-500 text-xs">Team Score</span>
-                                <span className="block font-semibold text-club-navy">{score1}</span>
+                                <span className="block font-semibold text-club-navy">{renderMarkedScore(numericScore1, Number(hole.par) || 0)}</span>
                               </div>
                             ) : (
                               <>
                                 <div className="flex-1">
                                   <span className="text-gray-500 text-xs">{player1Name}</span>
-                                  <span className="block font-semibold text-club-navy">{score1}</span>
+                                  <span className="block font-semibold text-club-navy">{renderMarkedScore(numericScore1, Number(hole.par) || 0)}</span>
                                 </div>
                                 <div className="flex-1">
                                   <span className="text-gray-500 text-xs">{player2Name}</span>
-                                  <span className="block font-semibold text-club-navy">{score2}</span>
+                                  <span className="block font-semibold text-club-navy">{renderMarkedScore(numericScore2, Number(hole.par) || 0)}</span>
                                 </div>
                               </>
                             )}
@@ -211,6 +245,8 @@ export default async function PairScorecardsPage({
           {participants.map((participant: any) => {
             const playerName = getDisplayName(participant.profiles)
             const scores = scoreByUserId.get(participant.user_id) || {}
+            const playerHandicap = Number(participant.event_handicap ?? participant.profiles?.handicap_index ?? 0)
+            const allocations = allocateStrokesByHole(holes, playerHandicap, handicapApplication)
             const handicapByPlayerId = Object.fromEntries(
               participants.map((entry: any) => [
                 entry.user_id,
@@ -220,12 +256,19 @@ export default async function PairScorecardsPage({
             const total = activeRound.mode_key === 'stableford'
               ? calculateStableford666TotalPoints(scores, holes, handicapByPlayerId)
               : totalScore(scores)
+            const netTotal = calculateNetTotal(scores, holes, playerHandicap, handicapApplication)
 
             return (
               <section key={participant.user_id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                   <h2 className="font-serif text-lg text-club-navy truncate">{playerName}</h2>
-                  <span className="text-sm font-bold text-club-navy">{activeRound.mode_key === 'stableford' ? `Points: ${total || 0}` : `Total: ${total || '--'}`}</span>
+                  <span className="text-sm font-bold text-club-navy">
+                    {activeRound.mode_key === 'stableford'
+                      ? `Points: ${total || 0}`
+                      : activeRound.mode_key === 'best_ball'
+                        ? `Gross: ${total || '--'} • Net: ${netTotal || '--'}`
+                        : `Total: ${total || '--'}`}
+                  </span>
                 </div>
 
                 {holes.length > 0 ? (
@@ -236,7 +279,19 @@ export default async function PairScorecardsPage({
                           <span className="font-bold text-club-navy">{hole.number}</span>
                           <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
                         </div>
-                        <span className="font-semibold text-club-navy">{scores?.[hole.number] ?? '--'}</span>
+                        <span className="font-semibold text-club-navy">
+                          {renderMarkedScore(numericHoleScore(scores, hole.number), Number(hole.par) || 0)}
+                          {activeRound.mode_key === 'best_ball' && Number.isFinite(Number(scores?.[hole.number])) ? (
+                            <span className="ml-1 inline-flex items-center gap-1 text-club-navy/80">
+                              <span>(</span>
+                              {renderMarkedScore(
+                                floorNetHoleScore(Number(scores?.[hole.number]), allocations.get(hole.number) || 0),
+                                Number(hole.par) || 0
+                              )}
+                              <span>)</span>
+                            </span>
+                          ) : null}
+                        </span>
                       </div>
                     ))}
                   </div>

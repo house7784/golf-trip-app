@@ -4,9 +4,14 @@ import Link from 'next/link'
 import { ChevronLeft, Save } from 'lucide-react'
 import { submitBestBallScores, submitScore, submitScrambleScore } from './actions'
 import Stableford666Scorecard from './Stableford666Scorecard'
+import { allocateStrokesByHole, type HandicapApplicationMode } from '@/lib/handicap'
 
 function samePair(slotA: number, slotB: number) {
   return (slotA <= 2 && slotB <= 2) || (slotA >= 3 && slotB >= 3)
+}
+
+function strokeDots(strokes: number) {
+  return strokes > 0 ? '•'.repeat(Math.min(strokes, 6)) : '—'
 }
 
 export default async function ScorecardPage({
@@ -48,9 +53,14 @@ export default async function ScorecardPage({
 
   const { data: event } = await supabase
     .from('events')
-    .select('created_by')
+    .select('created_by, handicap_application')
     .eq('id', id)
     .single()
+
+  const handicapApplication: HandicapApplicationMode =
+    event?.handicap_application === 'par3_one_then_next_hardest'
+      ? 'par3_one_then_next_hardest'
+      : 'standard'
 
   const { data: participant } = await supabase
     .from('event_participants')
@@ -192,6 +202,15 @@ export default async function ScorecardPage({
   })
 
   const scores = scoresByPlayerId.get(selectedPlayerId) || {}
+  const scoreHoles = (course.holes || []) as any[]
+  const strokeAllocationByPlayerId = new Map<string, Map<number, number>>()
+  ;(participants || []).forEach((entry: any) => {
+    const handicap = Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0)
+    strokeAllocationByPlayerId.set(
+      entry.user_id,
+      allocateStrokesByHole(scoreHoles, handicap, handicapApplication)
+    )
+  })
   const stablefordPlayers = groupedModeIds.map((playerId) => ({
     id: playerId,
     name: participantById.get(playerId)?.profiles?.full_name || 'Golfer',
@@ -393,6 +412,9 @@ export default async function ScorecardPage({
                               <span className="block text-[11px] font-bold uppercase tracking-wider text-club-text/60 truncate">
                                 {playerName}
                               </span>
+                              <span className="block text-[10px] text-gray-400 mb-1">
+                                Strokes on hole: {strokeAllocationByPlayerId.get(groupPlayerId)?.get(hole.number) || 0} ({strokeDots(strokeAllocationByPlayerId.get(groupPlayerId)?.get(hole.number) || 0)})
+                              </span>
                               <input
                                 name={`player_${groupPlayerId}_hole_${hole.number}`}
                                 type="number"
@@ -425,16 +447,21 @@ export default async function ScorecardPage({
                         </div>
 
                         <div className="flex-1 flex items-center justify-center">
-                          <input 
-                            name={`hole_${hole.number}`}
-                            type="number" 
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            defaultValue={currentVal}
-                            placeholder="-"
-                            disabled={!canEditSelected}
-                            className={`w-full text-center text-2xl outline-none bg-transparent ${scoreColor}`}
-                          />
+                          <div className="w-full">
+                            <input 
+                              name={`hole_${hole.number}`}
+                              type="number" 
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              defaultValue={currentVal}
+                              placeholder="-"
+                              disabled={!canEditSelected}
+                              className={`w-full text-center text-2xl outline-none bg-transparent ${scoreColor}`}
+                            />
+                            <p className="text-center text-[10px] text-gray-400 mt-1">
+                              Strokes: {strokeAllocationByPlayerId.get(selectedPlayerId)?.get(hole.number) || 0} ({strokeDots(strokeAllocationByPlayerId.get(selectedPlayerId)?.get(hole.number) || 0)})
+                            </p>
+                          </div>
                         </div>
 
                         <div className="w-12 text-center text-[10px] text-gray-300">

@@ -10,6 +10,7 @@ export type LeaderboardRow = {
   memberNames: string[]
   memberIds: string[]
   score: number | null
+  placePoints?: number | null
 }
 
 export type OverallRow = {
@@ -21,24 +22,29 @@ export type OverallRow = {
 
 type Props = {
   eventId: string
-  leaderboardActive: boolean
-  currentDayRows: LeaderboardRow[]
+  dailyRounds: Array<{
+    roundId: string
+    roundDate: string | null
+    formatLabel: string
+    rows: LeaderboardRow[]
+  }>
   overallRows: OverallRow[]
   currentRoundId: string | null
-  currentRoundDate: string | null
-  currentDayFormatLabel: string
 }
 
 export default function CollapsibleLeaderboard({
   eventId,
-  leaderboardActive,
-  currentDayRows,
+  dailyRounds,
   overallRows,
   currentRoundId,
-  currentRoundDate,
-  currentDayFormatLabel,
 }: Props) {
   const [open, setOpen] = useState(false)
+  const initialRoundIndex = Math.max(
+    0,
+    dailyRounds.findIndex((round) => round.roundId === currentRoundId)
+  )
+  const [roundIndex, setRoundIndex] = useState(initialRoundIndex)
+  const selectedRound = dailyRounds[roundIndex] || null
 
   return (
     <div id="leaderboards" className="mt-2">
@@ -60,39 +66,48 @@ export default function CollapsibleLeaderboard({
 
       {open && (
         <div className="space-y-4 mt-4">
-          {/* Current Day Leaderboard */}
+          {/* Daily Leaderboard */}
           <div className="bg-white p-4 rounded-xl shadow-md border-b-4 border-club-gold">
             <div className="flex justify-between items-center mb-3">
               <div>
                 <h3 className="text-xs font-bold uppercase text-gray-400 tracking-widest">
-                  Current Day
+                  Daily Results
                 </h3>
                 <p className="mt-1 inline-flex items-center rounded-full bg-club-paper px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-club-navy">
-                  Format: {currentDayFormatLabel}
+                  Format: {selectedRound?.formatLabel || 'No Round Set'}
                 </p>
               </div>
-              <span className="text-[10px] uppercase tracking-wider text-club-navy/60 font-bold">
-                {currentRoundDate
-                  ? new Date(`${currentRoundDate}T00:00:00`).toLocaleDateString()
-                  : 'No Round Set'}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRoundIndex((value) => Math.max(0, value - 1))}
+                  disabled={roundIndex <= 0}
+                  className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded border border-gray-200 text-club-navy disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <span className="text-[10px] uppercase tracking-wider text-club-navy/60 font-bold">
+                  {selectedRound?.roundDate
+                    ? new Date(`${selectedRound.roundDate}T00:00:00`).toLocaleDateString()
+                    : 'No Round Set'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRoundIndex((value) => Math.min(dailyRounds.length - 1, value + 1))}
+                  disabled={roundIndex >= dailyRounds.length - 1}
+                  className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded border border-gray-200 text-club-navy disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
             </div>
 
-            {!leaderboardActive && (
-              <div className="mb-3 bg-club-paper p-3 rounded border border-club-gold/20">
-                <p className="text-xs text-club-text/70">
-                  Leaderboard names are hidden until the organizer activates scoring visibility.
-                </p>
-              </div>
-            )}
-
-            {currentDayRows.length > 0 ? (
+            {selectedRound?.rows?.length ? (
               <div className="space-y-2">
-                {currentDayRows.map((row, index) => {
-                  const canLink =
-                    leaderboardActive && currentRoundId && row.memberIds.length > 0
+                {selectedRound.rows.map((row, index) => {
+                  const canLink = selectedRound.roundId && row.memberIds.length > 0
                   const href = canLink
-                    ? `/events/${eventId}/scorecards?roundId=${currentRoundId}&players=${encodeURIComponent(row.memberIds.join(','))}`
+                    ? `/events/${eventId}/scorecards?roundId=${selectedRound.roundId}&players=${encodeURIComponent(row.memberIds.join(','))}`
                     : null
 
                   const inner = (
@@ -103,15 +118,15 @@ export default function CollapsibleLeaderboard({
                         </div>
                         <div className="min-w-0">
                           <p className="font-bold text-sm text-club-navy truncate">
-                            {leaderboardActive ? row.label : `Position ${index + 1}`}
+                            {row.label}
                           </p>
                           <p className="text-xs text-gray-400 truncate">
-                            {leaderboardActive ? row.memberNames.join(' & ') : 'Names hidden'}
+                            {row.memberNames.join(' & ')}
                           </p>
                         </div>
                       </div>
                       <p className="font-serif font-bold text-club-navy text-lg">
-                        {row.score === null ? '--' : row.score}
+                        {row.score === null ? '--' : `${row.score} (${row.placePoints ?? 0})`}
                       </p>
                     </>
                   )
@@ -165,10 +180,10 @@ export default function CollapsibleLeaderboard({
                       </div>
                       <div className="min-w-0">
                         <p className="font-bold text-sm text-club-navy truncate">
-                          {leaderboardActive ? row.label : `Position ${index + 1}`}
+                          {row.label}
                         </p>
                         <p className="text-xs text-gray-400 truncate">
-                          {leaderboardActive ? row.memberNames.join(' & ') : 'Names hidden'}
+                          {row.memberNames.join(' & ')}
                         </p>
                       </div>
                     </div>

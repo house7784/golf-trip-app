@@ -41,16 +41,19 @@ export default async function ScoringPage({ params }: { params: Promise<{ id: st
     .eq('user_id', user.id)
     .maybeSingle()
 
-  if (participant?.role !== 'organizer') {
+  if (!participant) {
     return (
       <main className="min-h-screen bg-club-cream text-club-navy p-6">
         <div className="max-w-md mx-auto bg-white rounded-lg border border-gray-200 p-6 text-center">
-          <p className="font-serif text-xl mb-2">Organizers only</p>
+          <p className="font-serif text-xl mb-2">Access unavailable</p>
+          <p className="text-sm text-gray-500 mb-4">You need to be part of this event to view scoring.</p>
           <Link href={`/events/${id}/dashboard`} className="text-club-navy underline">Back to dashboard</Link>
         </div>
       </main>
     )
   }
+
+  const canEdit = participant.role === 'organizer'
 
   const { data: roundsData } = await supabase
     .from('rounds')
@@ -144,6 +147,12 @@ export default async function ScoringPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
+          {!canEdit && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-800">
+              View-only mode: Only organizers can edit scoring settings.
+            </div>
+          )}
+
           {rounds.map((round: any) => {
             const courseData = (round.course_data || {}) as Record<string, any>
             const savedPositionPoints = (courseData.position_points || {}) as Record<string, number>
@@ -188,7 +197,7 @@ export default async function ScoringPage({ params }: { params: Promise<{ id: st
                   </div>
                 </div>
 
-                <form action={saveScoringConfig} className="p-4 space-y-4">
+                <form action={canEdit ? saveScoringConfig : undefined} className="p-4 space-y-4">
                   <input type="hidden" name="roundId" value={round.id} />
                   <input type="hidden" name="eventId" value={id} />
 
@@ -208,6 +217,7 @@ export default async function ScoringPage({ params }: { params: Promise<{ id: st
                             step="1"
                             defaultValue={savedMatchWinner !== '' ? String(savedMatchWinner) : ''}
                             placeholder="e.g. 20"
+                            disabled={!canEdit}
                             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-club-gold"
                           />
                         </label>
@@ -220,6 +230,7 @@ export default async function ScoringPage({ params }: { params: Promise<{ id: st
                             step="1"
                             defaultValue={savedMatchTie !== '' ? String(savedMatchTie) : ''}
                             placeholder="e.g. 10"
+                            disabled={!canEdit}
                             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-club-gold"
                           />
                         </label>
@@ -246,6 +257,7 @@ export default async function ScoringPage({ params }: { params: Promise<{ id: st
                               step="1"
                               defaultValue={savedPositionPoints[String(pos)] !== undefined ? String(savedPositionPoints[String(pos)]) : ''}
                               placeholder="0"
+                              disabled={!canEdit}
                               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-club-gold"
                             />
                           </label>
@@ -255,12 +267,14 @@ export default async function ScoringPage({ params }: { params: Promise<{ id: st
                     </div>
                   )}
 
-                  <button
-                    type="submit"
-                    className="w-full bg-club-navy text-white py-2.5 rounded-lg font-bold text-sm uppercase tracking-wide hover:bg-club-gold hover:text-club-navy transition-colors"
-                  >
-                    Save Points
-                  </button>
+                  {canEdit ? (
+                    <button
+                      type="submit"
+                      className="w-full bg-club-navy text-white py-2.5 rounded-lg font-bold text-sm uppercase tracking-wide hover:bg-club-gold hover:text-club-navy transition-colors"
+                    >
+                      Save Points
+                    </button>
+                  ) : null}
                 </form>
               </section>
             )

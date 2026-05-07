@@ -16,8 +16,8 @@ import {
 import CopyInviteButton from './CopyInviteButton'
 import TrashTalk from '../chat/TrashTalk'
 import CollapsibleLeaderboard from './CollapsibleLeaderboard'
-import { activateLeaderboard, deactivateLeaderboard, postAnnouncement } from './actions'
-import { allocateStrokesByHole, calculateNetTotal, clampHandicap, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
+import { activateLeaderboard, deactivateLeaderboard, emailDailySummary, postAnnouncement } from './actions'
+import { allocateStrokesByHole, calculateNetTotal, clampHandicap, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 import { getDefaultLeaderboardGroupSize, normalizeLeaderboardGroupSize } from '@/lib/game_modes'
 import { calculateStableford666TotalPoints, getStableford666Name } from '@/lib/stableford_666'
 
@@ -340,7 +340,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 			strokeAllocationByRoundUser.set(cacheKey, allocation)
 		}
 
-		return rawScore - (allocation.get(holeNumber) || 0)
+		return floorNetHoleScore(rawScore, allocation.get(holeNumber) || 0)
 	}
 
 	const getBestBallHoleScore = (roundId: string, memberIds: string[], holeNumber: number) => {
@@ -520,51 +520,61 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		})
 	}
 
-	const currentDayGroupSize = currentRound?.mode_key === 'stableford'
-		? 2
-		: normalizeLeaderboardGroupSize(
-			Number(currentRound?.course_data?.leaderboard_group_size) ||
-				getDefaultLeaderboardGroupSize(currentRound?.mode_key)
-		)
+	const getRoundGroupSize = (round: RoundRow) =>
+		round.mode_key === 'stableford'
+			? 2
+			: normalizeLeaderboardGroupSize(
+				Number(round.course_data?.leaderboard_group_size) ||
+					getDefaultLeaderboardGroupSize(round.mode_key)
+			)
 
-	const currentDayFormatLabel =
-		currentRound?.mode_key === 'stableford'
+	const getRoundFormatLabel = (round: RoundRow, groupSize: number) =>
+		round.mode_key === 'stableford'
 			? getStableford666Name()
-			: currentRound?.mode_key === 'best_ball' && currentRound?.course_data?.best_ball_matchplay && currentDayGroupSize === 2
+			: round.mode_key === 'best_ball' && round.course_data?.best_ball_matchplay && groupSize === 2
 				? '2-Person Match Play'
-				: currentDayGroupSize === 4
+				: groupSize === 4
 					? '4-Person Teams'
-					: currentDayGroupSize === 2
+					: groupSize === 2
 						? '2-Person Teams'
 						: 'Individual'
 
-	let currentDayLeaderboardRows: Array<{
-		key: string
-		label: string
-		memberNames: string[]
-		memberIds: string[]
-		score: number | null
-	}> = []
+	const buildRoundLeaderboardRows = async (round: RoundRow) => {
+		const groupSize = getRoundGroupSize(round)
+		const roundEntries = await buildPairingEntries(round.id, groupSize)
 
-	if (currentRound) {
-		const currentDayEntries = await buildPairingEntries(currentRound.id, currentDayGroupSize)
+		if (round.mode_key === 'stableford') {
+			return {
+				groupSize,
+				rows: buildStableford666Rows(round, roundEntries),
+			}
+		}
 
-		if (currentRound.mode_key === 'stableford') {
-			currentDayLeaderboardRows = buildStableford666Rows(currentRound, currentDayEntries)
-		} else if (currentRound.mode_key === 'best_ball') {
-			const bestBallMatchplay = Boolean(currentRound.course_data?.best_ball_matchplay) && currentDayGroupSize === 2
-			currentDayLeaderboardRows = bestBallMatchplay
-				? buildBestBallMatchPlayRows(currentRound, currentDayEntries)
-				: buildBestBallStrokeRows(currentRound, currentDayEntries)
-		} else if (currentRound.mode_key === 'scramble') {
-			currentDayLeaderboardRows = buildScrambleStrokeRows(currentRound.id, currentDayEntries)
-		} else {
-			currentDayLeaderboardRows = currentDayEntries
+		if (round.mode_key === 'best_ball') {
+			const bestBallMatchplay = Boolean(round.course_data?.best_ball_matchplay) && groupSize === 2
+			return {
+				groupSize,
+				rows: bestBallMatchplay
+					? buildBestBallMatchPlayRows(round, roundEntries)
+					: buildBestBallStrokeRows(round, roundEntries),
+			}
+		}
+
+		if (round.mode_key === 'scramble') {
+			return {
+				groupSize,
+				rows: buildScrambleStrokeRows(round.id, roundEntries),
+			}
+		}
+
+		return {
+			groupSize,
+			rows: roundEntries
 				.map((entry) => {
 					let total = 0
 					let scoredPlayers = 0
 					entry.memberIds.forEach((memberId) => {
-						const value = scoreMap.get(`${currentRound.id}:${memberId}`)
+						const value = scoreMap.get(`${round.id}:${memberId}`)
 						if (value !== undefined) {
 							total += value
 							scoredPlayers += 1
@@ -584,8 +594,68 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 					if (b.score === null) return -1
 					if (a.score !== b.score) return a.score - b.score
 					return a.label.localeCompare(b.label)
-				})
+				}),
 		}
+	}
+
+	const appendPlacePoints = (
+		round: RoundRow,
+		rows: Array<{
+			key: string
+			label: string
+			memberNames: string[]
+			memberIds: string[]
+			score: number | null
+		}>
+	) => {
+		const courseData = (round.course_data || {}) as Record<string, any>
+		const positionPoints = (courseData.position_points || {}) as Record<string, number>
+		const hasConfiguredPoints = Object.keys(positionPoints).length > 0
+		const scoredRows = rows.filter((row) => row.score !== null)
+		const placePointsByKey = new Map<string, number>()
+
+		let rank = 0
+		let previousScore: number | null = null
+		scoredRows.forEach((row, index) => {
+			if (row.score !== previousScore) {
+				rank = index + 1
+				previousScore = row.score
+			}
+
+			const tripPts = hasConfiguredPoints
+				? (positionPoints[String(rank)] ?? 0)
+				: (scoredRows.length - rank + 1)
+			placePointsByKey.set(row.key, tripPts)
+		})
+
+		return rows.map((row) => ({
+			...row,
+			placePoints: row.score === null ? null : (placePointsByKey.get(row.key) ?? 0),
+		}))
+	}
+
+	const dailyRoundLeaderboards = [] as Array<{
+		roundId: string
+		roundDate: string | null
+		formatLabel: string
+		rows: Array<{
+			key: string
+			label: string
+			memberNames: string[]
+			memberIds: string[]
+			score: number | null
+		}>
+	}>
+
+	for (const round of sortedRounds) {
+		const { groupSize, rows } = await buildRoundLeaderboardRows(round)
+		const rowsWithPoints = appendPlacePoints(round, rows)
+		dailyRoundLeaderboards.push({
+			roundId: round.id,
+			roundDate: round.date || null,
+			formatLabel: getRoundFormatLabel(round, groupSize),
+			rows: rowsWithPoints,
+		})
 	}
 
 	const overallPoints = new Map<string, number>()
@@ -791,6 +861,14 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 						<span className="font-bold text-xs uppercase tracking-wider">Challenges</span>
 					</Link>
 
+					<Link
+						href={`/events/${id}/scoring`}
+						className="bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition"
+					>
+						<BarChart3 size={28} className="text-club-gold" />
+						<span className="font-bold text-xs uppercase tracking-wider">Scoring</span>
+					</Link>
+
 					<TrashTalk
 						eventId={id}
 						currentUser={currentUser}
@@ -832,6 +910,13 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 									</form>
 								)}
 								<CopyInviteButton eventId={id} />
+								<form action={emailDailySummary}>
+									<input type="hidden" name="eventId" value={id} />
+									<input type="hidden" name="roundId" value={currentRound?.id || ''} />
+									<button className="bg-club-gold text-club-navy py-2 px-3 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-club-navy hover:text-white transition-all">
+										Email Daily Summary
+									</button>
+								</form>
 							</div>
 						</div>
 						<div className="grid grid-cols-3 gap-3">
@@ -856,12 +941,9 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 				{/* 4. LEADERBOARD (collapsible, at bottom) */}
 				<CollapsibleLeaderboard
 					eventId={id}
-					leaderboardActive={leaderboardActive}
-					currentDayRows={currentDayLeaderboardRows}
+					dailyRounds={dailyRoundLeaderboards}
 					overallRows={overallLeaderboard}
 					currentRoundId={currentRound?.id ?? null}
-					currentRoundDate={currentRound?.date ?? null}
-					currentDayFormatLabel={currentDayFormatLabel}
 				/>
 
 			</div>

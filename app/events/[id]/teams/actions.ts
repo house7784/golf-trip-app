@@ -60,3 +60,19 @@ export async function setCaptain(teamId: string, userId: string, eventId: string
   
   revalidatePath(`/events/${eventId}/teams`)
 }
+
+// 4. RENAME TEAM
+export async function renameTeam(teamId: string, name: string, eventId: string) {
+  const supabase = await createClient()
+
+  const trimmed = (name || '').trim()
+  if (!teamId || !trimmed) return
+
+  await supabase
+    .from('teams')
+    .update({ name: trimmed.slice(0, 40) })
+    .eq('id', teamId)
+
+  revalidatePath(`/events/${eventId}/teams`)
+  revalidatePath(`/events/${eventId}/dashboard`)
+}

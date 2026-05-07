@@ -5,6 +5,7 @@ import { Clock, Trash2, Plus, Lock, Unlock, Edit, Calendar, MapPin, User, ArrowL
 import CourseSetup from './CourseSetup'
 import SlotAssignment from './SlotAssignment'
 import { createTeeTime, deleteTeeTime, toggleRoundLock } from './actions'
+import { GAME_MODES, type GameModeKey } from '@/lib/game_modes'
 
 // Helper to format dates nicely (e.g., "Fri, May 16")
 const formatDate = (dateStr: string) => {
@@ -102,6 +103,9 @@ export default async function TeeTimesPage({
   const sortedTimes = teeTimes.sort((a: any, b: any) => a.time.localeCompare(b.time))
   const firstTeeTime = sortedTimes.length > 0 ? sortedTimes[0].time : null
   const firstTeeTimeLabel = formatTeeTime(firstTeeTime)
+  const mode = GAME_MODES[(activeRound.mode_key as GameModeKey) || 'scramble']
+  const roundModeName = mode?.name || activeRound.mode_key || 'Game Mode'
+  const roundModeDescription = mode?.description || 'No game mode description set.'
 
   // Calculate WHO IS PLAYING
   const assignedPlayerIds = new Set()
@@ -176,9 +180,16 @@ export default async function TeeTimesPage({
 
         {/* Active Round Details Bar */}
         <div className="px-6 py-4 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-2 text-club-navy font-bold">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 text-club-navy font-bold">
                 <MapPin size={16} className="text-club-gold" />
                 {activeRound.course_name || 'Course Not Set'}
+              </div>
+              <div className="text-xs text-club-text/80">
+                <span className="font-bold text-club-navy">{roundModeName}</span>
+                <span className="mx-2 text-gray-300">•</span>
+                <span>{roundModeDescription}</span>
+              </div>
             </div>
 
             <div className="flex gap-3 items-center">

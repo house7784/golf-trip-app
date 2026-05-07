@@ -62,6 +62,10 @@ export function allocateStrokesByHole(
   return allocation
 }
 
+export function floorNetHoleScore(gross: number, allocatedStrokes: number) {
+  return Math.max(1, gross - Math.max(0, Number(allocatedStrokes || 0)))
+}
+
 export function calculateNetTotal(
   holeScores: Record<string, number> | null | undefined,
   holes: CourseHole[] | null | undefined,
@@ -77,9 +81,10 @@ export function calculateNetTotal(
   const allocation = allocateStrokesByHole(holes, handicap, mode)
 
   return entries.reduce((sum, [holeKey, score]) => {
-    const gross = Number(score) || 0
+    const gross = Number(score)
+    if (!Number.isFinite(gross)) return sum
     const holeNumber = Number(holeKey)
     const stroke = allocation.get(holeNumber) || 0
-    return sum + (gross - stroke)
+    return sum + floorNetHoleScore(gross, stroke)
   }, 0)
 }

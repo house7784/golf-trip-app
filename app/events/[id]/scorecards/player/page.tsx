@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
+import { allocateStrokesByHole, calculateNetTotal, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 import {
   calculateStableford666HoleSummary,
   calculateStableford666TotalPoints,
+  getStableford666Allocations,
   getStableford666Data,
   getStableford666SegmentLabel,
 } from '@/lib/stableford_666'
@@ -30,6 +32,113 @@ function holeValue(holeScores: Record<string, any> | null | undefined, holeNumbe
 
 function samePair(slotA: number, slotB: number) {
   return (slotA <= 2 && slotB <= 2) || (slotA >= 3 && slotB >= 3)
+}
+
+function numericHoleScore(holeScores: Record<string, any> | null | undefined, holeNumber: number) {
+  const value = Number(holeScores?.[String(holeNumber)] ?? holeScores?.[holeNumber])
+  return Number.isFinite(value) ? value : null
+}
+
+function strokeDots(strokes: number) {
+  return strokes > 0 ? '•'.repeat(Math.min(strokes, 6)) : '—'
+}
+
+function scoreMarkerClass(score: number | null, par: number) {
+  if (score === null) return null
+  const delta = score - par
+  if (delta === -1) return 'inline-flex min-w-7 h-7 items-center justify-center rounded-full border-2 border-club-navy px-1 leading-none'
+  if (delta <= -2) return 'inline-flex min-w-7 h-7 items-center justify-center rounded-full border-2 border-club-navy ring-1 ring-club-navy/70 ring-offset-1 px-1 leading-none'
+  if (delta === 1) return 'inline-flex min-w-7 h-7 items-center justify-center rounded-sm border-2 border-club-navy px-1 leading-none'
+  if (delta >= 2) return 'inline-flex min-w-7 h-7 items-center justify-center rounded-sm border-2 border-club-navy ring-1 ring-club-navy/70 ring-offset-1 px-1 leading-none'
+  return null
+}
+
+function renderMarkedScore(score: number | null, par: number) {
+  if (score === null) return '--'
+  const markerClass = scoreMarkerClass(score, par)
+  if (!markerClass) return score
+  return <span className={markerClass}>{score}</span>
+}
+
+function renderClassicScorecard(
+  holes: CourseHole[],
+  holeScores: Record<string, any> | null | undefined,
+  allocations?: Map<number, number>
+) {
+  const sections = [
+    { label: 'OUT', holes: holes.filter((hole) => hole.number <= 9) },
+    { label: 'IN', holes: holes.filter((hole) => hole.number >= 10) },
+  ]
+
+  return (
+    <div className="space-y-3">
+      {sections.map((section) => {
+        if (section.holes.length === 0) return null
+
+        const parTotal = section.holes.reduce((sum, hole) => sum + (Number(hole.par) || 0), 0)
+        const grossTotal = section.holes.reduce((sum, hole) => {
+          const gross = numericHoleScore(holeScores, hole.number)
+          return sum + (gross ?? 0)
+        }, 0)
+        const netTotal = section.holes.reduce((sum, hole) => {
+          const gross = numericHoleScore(holeScores, hole.number)
+          if (gross === null) return sum
+          return sum + floorNetHoleScore(gross, allocations?.get(hole.number) || 0)
+        }, 0)
+
+        return (
+          <div key={section.label} className="rounded-lg border border-gray-200 overflow-hidden">
+            <div className="grid" style={{ gridTemplateColumns: `repeat(${section.holes.length}, minmax(0, 1fr)) 60px` }}>
+              {section.holes.map((hole) => (
+                <div key={`${section.label}-hole-${hole.number}`} className="px-1 py-2 text-center text-gray-500 text-xs border-r border-gray-100">
+                  {hole.number}
+                </div>
+              ))}
+              <div className="px-1 py-2 text-center text-gray-500 text-xs font-bold">{section.label}</div>
+
+              {section.holes.map((hole) => (
+                <div key={`${section.label}-par-${hole.number}`} className="px-1 py-2 text-center text-sm border-t border-r border-gray-100 text-club-navy">
+                  {hole.par}
+                </div>
+              ))}
+              <div className="px-1 py-2 text-center text-sm border-t text-club-navy font-bold">{parTotal}</div>
+
+              {section.holes.map((hole) => {
+                const gross = numericHoleScore(holeScores, hole.number)
+                return (
+                  <div key={`${section.label}-gross-${hole.number}`} className="px-1 py-2 text-center text-lg border-t border-r border-gray-100 text-club-navy font-semibold">
+                    {renderMarkedScore(gross, Number(hole.par) || 0)}
+                  </div>
+                )
+              })}
+              <div className="px-1 py-2 text-center text-lg border-t text-club-navy font-bold">{grossTotal || '--'}</div>
+
+              {section.holes.map((hole) => {
+                const strokes = allocations?.get(hole.number) || 0
+                return (
+                  <div key={`${section.label}-dots-${hole.number}`} className="px-1 py-1 text-center text-xs border-t border-r border-gray-100 text-club-navy/80">
+                    {strokeDots(strokes)}
+                  </div>
+                )
+              })}
+              <div className="px-1 py-1 text-center text-xs border-t text-club-navy/80">Strokes</div>
+
+              {section.holes.map((hole) => {
+                const gross = numericHoleScore(holeScores, hole.number)
+                const net = gross === null ? null : floorNetHoleScore(gross, allocations?.get(hole.number) || 0)
+                return (
+                  <div key={`${section.label}-net-${hole.number}`} className="px-1 py-2 text-center text-sm border-t border-r border-gray-100 text-club-navy">
+                    {renderMarkedScore(net, Number(hole.par) || 0)}
+                  </div>
+                )
+              })}
+              <div className="px-1 py-2 text-center text-sm border-t text-club-navy font-bold">{netTotal || '--'}</div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 export default async function PlayerScorecardsPage({
@@ -108,6 +217,17 @@ export default async function PlayerScorecardsPage({
     )
   }
 
+  const { data: eventSettings } = await supabase
+    .from('events')
+    .select('handicap_application')
+    .eq('id', id)
+    .maybeSingle()
+
+  const handicapApplication: HandicapApplicationMode =
+    eventSettings?.handicap_application === 'par3_one_then_next_hardest'
+      ? 'par3_one_then_next_hardest'
+      : 'standard'
+
   const { data: roundsData } = await supabase
     .from('rounds')
     .select('id, date, mode_key, course_name, course_data')
@@ -163,6 +283,9 @@ export default async function PlayerScorecardsPage({
   )
 
   const playerName = getDisplayName(normalizeProfile(playerParticipant.profiles))
+  const selectedPlayerHandicap = Number(
+    playerParticipant.event_handicap ?? normalizeProfile(playerParticipant.profiles)?.handicap_index ?? 0
+  )
 
   return (
     <main className="min-h-screen bg-club-cream text-club-navy p-6 pb-24">
@@ -172,7 +295,9 @@ export default async function PlayerScorecardsPage({
         </Link>
         <div>
           <h1 className="font-serif text-2xl text-club-navy">{playerName} Scorecards</h1>
-          <p className="text-xs text-club-text/60">All rounds for this event, including 666 bonus/drink details</p>
+          <p className="text-xs text-club-text/60">
+            Handicap {selectedPlayerHandicap.toFixed(1)} • All rounds for this event, including 666 bonus/drink details
+          </p>
         </div>
       </div>
 
@@ -201,6 +326,9 @@ export default async function PlayerScorecardsPage({
             const partnerIds = pairIds.filter((value) => value !== playerId)
             const partnerId = partnerIds[0] || null
             const partnerName = partnerId ? getDisplayName(profileByUserId.get(partnerId)) : 'Partner'
+            const playerHandicap = Number(handicapByPlayerId[playerId] ?? 0)
+            const playerAllocations = allocateStrokesByHole(holes as CourseHole[], playerHandicap, handicapApplication)
+            const playerNetTotal = calculateNetTotal(playerScores, holes as CourseHole[], playerHandicap, handicapApplication)
 
             if (round.mode_key === 'scramble') {
               const sharedHolderId = pairIds.find((memberId) => scoreByRoundUser.get(`${round.id}:${memberId}`)) || playerId
@@ -221,16 +349,8 @@ export default async function PlayerScorecardsPage({
                   </div>
 
                   {holes.length > 0 ? (
-                    <div className="divide-y divide-gray-100">
-                      {holes.map((hole: any) => (
-                        <div key={hole.number} className="px-4 py-2 flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-3">
-                            <span className="font-bold text-club-navy">{hole.number}</span>
-                            <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
-                          </div>
-                          <span className="font-semibold text-club-navy">{sharedScores?.[hole.number] ?? '--'}</span>
-                        </div>
-                      ))}
+                    <div className="p-4">
+                      {renderClassicScorecard(holes as CourseHole[], sharedScores)}
                     </div>
                   ) : (
                     <div className="p-4 text-sm text-gray-500">No hole setup found for this round.</div>
@@ -241,14 +361,18 @@ export default async function PlayerScorecardsPage({
 
             if (round.mode_key === 'best_ball') {
               const partnerScores = partnerId ? scoreByRoundUser.get(`${round.id}:${partnerId}`) || {} : {}
+              const partnerHandicap = Number(handicapByPlayerId[partnerId || ''] ?? 0)
+              const partnerAllocations = allocateStrokesByHole(holes as CourseHole[], partnerHandicap, handicapApplication)
               const individualTotal = totalScore(playerScores)
               const pairTotal = holes.reduce((sum: number, hole: any) => {
                 const myValue = holeValue(playerScores, hole.number)
                 const partnerValue = holeValue(partnerScores, hole.number)
                 if (myValue === null && partnerValue === null) return sum
-                if (myValue === null) return sum + (partnerValue || 0)
-                if (partnerValue === null) return sum + myValue
-                return sum + Math.min(myValue, partnerValue)
+                const myNet = myValue === null ? null : floorNetHoleScore(myValue, playerAllocations.get(hole.number) || 0)
+                const partnerNet = partnerValue === null ? null : floorNetHoleScore(partnerValue, partnerAllocations.get(hole.number) || 0)
+                if (myNet === null) return sum + (partnerNet || 0)
+                if (partnerNet === null) return sum + myNet
+                return sum + Math.min(myNet, partnerNet)
               }, 0)
 
               return (
@@ -265,19 +389,9 @@ export default async function PlayerScorecardsPage({
                     </div>
                     <div className="flex items-center justify-between text-sm font-semibold text-club-navy mb-2">
                       <span>{playerName}</span>
-                      <span>Total: {hasScore ? individualTotal : '--'}</span>
+                      <span>Gross: {hasScore ? individualTotal : '--'} • Net: {hasScore ? playerNetTotal : '--'}</span>
                     </div>
-                    <div className="divide-y divide-gray-100">
-                      {holes.map((hole: any) => (
-                        <div key={`ind-${hole.number}`} className="px-1 py-2 flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-3">
-                            <span className="font-bold text-club-navy">{hole.number}</span>
-                            <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
-                          </div>
-                          <span className="font-semibold text-club-navy">{playerScores?.[hole.number] ?? '--'}</span>
-                        </div>
-                      ))}
-                    </div>
+                    {renderClassicScorecard(holes as CourseHole[], playerScores, playerAllocations)}
                   </div>
 
                   <div className="p-4">
@@ -287,20 +401,22 @@ export default async function PlayerScorecardsPage({
                     </div>
                     <div className="flex items-center justify-between text-sm font-semibold text-club-navy mb-2">
                       <span>Best Ball by Hole</span>
-                      <span>Pair Total: {partnerId ? pairTotal : '--'}</span>
+                      <span>Pair Net Total: {partnerId ? pairTotal : '--'}</span>
                     </div>
                     <div className="divide-y divide-gray-100">
                       {holes.map((hole: any) => {
                         const myValue = holeValue(playerScores, hole.number)
                         const partnerValue = holeValue(partnerScores, hole.number)
+                        const myNet = myValue === null ? null : floorNetHoleScore(myValue, playerAllocations.get(hole.number) || 0)
+                        const partnerNet = partnerValue === null ? null : floorNetHoleScore(partnerValue, partnerAllocations.get(hole.number) || 0)
                         const bestValue =
-                          myValue === null && partnerValue === null
+                          myNet === null && partnerNet === null
                             ? '--'
-                            : myValue === null
-                              ? partnerValue
-                              : partnerValue === null
-                                ? myValue
-                                : Math.min(myValue, partnerValue)
+                            : myNet === null
+                              ? partnerNet
+                              : partnerNet === null
+                                ? myNet
+                                : Math.min(myNet, partnerNet)
 
                         return (
                           <div key={`pair-${hole.number}`} className="px-1 py-2 text-sm">
@@ -309,10 +425,10 @@ export default async function PlayerScorecardsPage({
                                 <span className="font-bold text-club-navy">{hole.number}</span>
                                 <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
                               </div>
-                              <span className="font-semibold text-club-gold">Best: {bestValue}</span>
+                              <span className="font-semibold text-club-gold">Best Net: {bestValue}</span>
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                              {playerName}: {myValue ?? '--'} • {partnerName}: {partnerValue ?? '--'}
+                              {playerName}: {myValue ?? '--'} ({myNet ?? '--'}) • {partnerName}: {partnerValue ?? '--'} ({partnerNet ?? '--'})
                             </div>
                           </div>
                         )
@@ -326,6 +442,7 @@ export default async function PlayerScorecardsPage({
             if (round.mode_key === 'stableford') {
               const data = getStableford666Data(playerScores)
               const totalPoints = calculateStableford666TotalPoints(playerScores, holes, handicapByPlayerId)
+              const stablefordAllocations = getStableford666Allocations(holes as CourseHole[], handicapByPlayerId)
               const sharedHoles = holes.filter((hole: any) => hole.number <= 12)
               const bestBallHoles = holes.filter((hole: any) => hole.number > 12)
 
@@ -379,6 +496,19 @@ export default async function PlayerScorecardsPage({
                         const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes)
                         const myScore = holeData?.playerScores?.[playerId]
                         const partnerScore = partnerId ? holeData?.playerScores?.[partnerId] : null
+                        const myNet = Number.isFinite(Number(myScore))
+                          ? floorNetHoleScore(Number(myScore), stablefordAllocations.get(playerId)?.get(hole.number) || 0)
+                          : null
+                        const partnerNet = partnerId && Number.isFinite(Number(partnerScore))
+                          ? floorNetHoleScore(Number(partnerScore), stablefordAllocations.get(partnerId)?.get(hole.number) || 0)
+                          : null
+                        const bestNet = myNet === null && partnerNet === null
+                          ? '--'
+                          : myNet === null
+                            ? partnerNet
+                            : partnerNet === null
+                              ? myNet
+                              : Math.min(myNet, partnerNet)
                         return (
                           <div key={`bb-${hole.number}`} className="px-1 py-2 text-sm">
                             <div className="flex items-center justify-between">
@@ -386,10 +516,10 @@ export default async function PlayerScorecardsPage({
                                 <span className="font-bold text-club-navy">{hole.number}</span>
                                 <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
                               </div>
-                              <span className="font-semibold text-club-gold">Pts {summary.totalPoints}</span>
+                              <span className="font-semibold text-club-gold">Pts {summary.totalPoints} • Best Net {bestNet}</span>
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                              {playerName}: {myScore ?? '--'} • {partnerName}: {partnerScore ?? '--'} • Drinks B/C/S: {holeData.beers || 0}/{holeData.cocktails || 0}/{holeData.shots || 0} • Bonuses: {holeData.fairwayHit ? 'FWY ' : ''}{holeData.gir ? 'GIR ' : ''}{holeData.onePutt ? '1Putt ' : ''}{holeData.chipIn ? 'ChipIn' : ''}
+                              {playerName}: {myScore ?? '--'} ({myNet ?? '--'}) • {partnerName}: {partnerScore ?? '--'} ({partnerNet ?? '--'}) • Drinks B/C/S: {holeData.beers || 0}/{holeData.cocktails || 0}/{holeData.shots || 0} • Bonuses: {holeData.fairwayHit ? 'FWY ' : ''}{holeData.gir ? 'GIR ' : ''}{holeData.onePutt ? '1Putt ' : ''}{holeData.chipIn ? 'ChipIn' : ''}
                             </div>
                           </div>
                         )
@@ -408,20 +538,12 @@ export default async function PlayerScorecardsPage({
                     <h2 className="font-serif text-lg text-club-navy">{round.course_name || 'Round'}</h2>
                     <p className="text-xs text-club-text/60">{round.mode_key || 'standard'} • {new Date(`${round.date}T00:00:00`).toLocaleDateString()}</p>
                   </div>
-                  <span className="text-sm font-bold text-club-navy">Total: {hasScore ? total : '--'}</span>
+                  <span className="text-sm font-bold text-club-navy">Gross: {hasScore ? total : '--'} • Net: {hasScore ? playerNetTotal : '--'}</span>
                 </div>
 
                 {holes.length > 0 ? (
-                  <div className="divide-y divide-gray-100">
-                    {holes.map((hole: any) => (
-                      <div key={hole.number} className="px-4 py-2 flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold text-club-navy">{hole.number}</span>
-                          <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
-                        </div>
-                        <span className="font-semibold text-club-navy">{playerScores?.[hole.number] ?? '--'}</span>
-                      </div>
-                    ))}
+                  <div className="p-4">
+                    {renderClassicScorecard(holes as CourseHole[], playerScores, playerAllocations)}
                   </div>
                 ) : (
                   <div className="p-4 text-sm text-gray-500">No hole setup found for this round.</div>

@@ -1,4 +1,4 @@
-import { allocateStrokesByHole, type CourseHole } from '@/lib/handicap'
+import { allocateStrokesByHole, floorNetHoleScore, type CourseHole } from '@/lib/handicap'
 
 export type Stableford666HoleData = {
   teamScore?: number | null
@@ -104,7 +104,7 @@ export function calculateStableford666HoleSummary(
       const gross = Number(score)
       if (!Number.isFinite(gross)) return
       const allocation = allocations.get(playerId)
-      const net = gross - (allocation?.get(hole.number) || 0)
+      const net = floorNetHoleScore(gross, allocation?.get(hole.number) || 0)
       if (scoringValue === null || net < scoringValue) scoringValue = net
       if (gross === 1) holeInOne = true
     })
