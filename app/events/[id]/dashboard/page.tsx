@@ -883,18 +883,18 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 				<div className="grid grid-cols-2 gap-4">
 					<Link
 						href={`/events/${id}/scorecard`}
-						className="bg-club-green text-white p-4 rounded-xl shadow-md flex flex-col items-center justify-center gap-2 h-32 active:bg-opacity-90 transition"
+						className="bg-white text-club-navy p-4 rounded-xl border-2 border-club-green/40 ring-1 ring-club-green/20 shadow-lg hover:-translate-y-0.5 hover:shadow-xl hover:border-club-green/70 active:translate-y-0 active:scale-[0.99] transition flex flex-col items-center justify-center gap-2 h-32"
 					>
-						<Edit size={32} />
+						<Edit size={32} className="text-club-green drop-shadow-sm" />
 						<span className="font-bold text-sm">Enter Scores</span>
 					</Link>
 
 					{(isCaptain || isOrganizer) && (
 						<Link
 							href={`/events/${id}/scorecard?scope=team`}
-							className="bg-club-gold text-club-navy p-4 rounded-xl shadow-md flex flex-col items-center justify-center gap-2 h-32 active:bg-opacity-90 transition"
+							className="bg-white text-club-navy p-4 rounded-xl border-2 border-club-gold/60 ring-1 ring-club-gold/20 shadow-lg hover:-translate-y-0.5 hover:shadow-xl hover:border-club-gold active:translate-y-0 active:scale-[0.99] transition flex flex-col items-center justify-center gap-2 h-32"
 						>
-							<Edit size={28} />
+							<Edit size={28} className="text-club-gold drop-shadow-sm" />
 							<span className="font-bold text-xs uppercase tracking-wider">Manage Team Scores</span>
 						</Link>
 					)}

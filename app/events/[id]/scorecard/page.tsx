@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ChevronLeft, Save } from 'lucide-react'
 import { submitBestBallScores, submitScore, submitScrambleScore } from './actions'
 import Stableford666Scorecard from './Stableford666Scorecard'
-import { allocateStrokesByHole, clampHandicap, type HandicapApplicationMode } from '@/lib/handicap'
+import { allocateStrokesByHole, clampHandicap, floorNetHoleScore, type HandicapApplicationMode } from '@/lib/handicap'
 
 function samePair(slotA: number, slotB: number) {
   return (slotA <= 2 && slotB <= 2) || (slotA >= 3 && slotB >= 3)
@@ -118,9 +118,13 @@ export default async function ScorecardPage({
     if (isBestBall || isStableford666) return 2
     return 1
   })()
+  const isBestBallMatchPlay =
+    isBestBall && Boolean((activeRound as any).course_data?.best_ball_matchplay) && groupedModeSize === 2
 
   let groupedModeIds: string[] = []
   let groupedModeNames: string[] = []
+  let opposingModeIds: string[] = []
+  let opposingModeNames: string[] = []
   // ─────────────────────────────────────────────────────────────────────────
 
   const editableUserIds = new Set<string>()
@@ -184,6 +188,14 @@ export default async function ScorecardPage({
       groupedModeNames = groupedModeIds.map(
         (pid) => participantById.get(pid)?.profiles?.full_name || 'Golfer'
       )
+
+      if (isBestBallMatchPlay) {
+        const opponents = sameTeeTime.filter((p: any) => !samePair(p.slot_number, anchorPairing.slot_number))
+        opposingModeIds = opponents.map((p: any) => p.player_id as string)
+        opposingModeNames = opposingModeIds.map(
+          (pid) => participantById.get(pid)?.profiles?.full_name || 'Golfer'
+        )
+      }
     }
     if (groupedModeIds.length === 0 && selectedPlayerId) {
       groupedModeIds = [selectedPlayerId]
@@ -191,7 +203,9 @@ export default async function ScorecardPage({
     }
   }
   
-  const scoreIdsToLoad = isBestBall || isStableford666 ? groupedModeIds : [selectedPlayerId]
+  const scoreIdsToLoad = isBestBall || isStableford666
+    ? Array.from(new Set([...groupedModeIds, ...(isBestBallMatchPlay ? opposingModeIds : [])]))
+    : [selectedPlayerId]
   const { data: existingScores } = await supabase
     .from('scores')
     .select('user_id, hole_scores')
@@ -220,6 +234,53 @@ export default async function ScorecardPage({
       participantById.get(playerId)?.event_handicap ?? participantById.get(playerId)?.profiles?.handicap_index ?? 0
     ), handicapCap),
   }))
+
+  const matchPlaySummary = isBestBallMatchPlay
+    ? (() => {
+        let teamHolesWon = 0
+        let opponentHolesWon = 0
+        let decidedHoles = 0
+
+        for (const hole of scoreHoles) {
+          const teamBestNet = groupedModeIds.reduce<number | null>((best, playerId) => {
+            const gross = Number(scoresByPlayerId.get(playerId)?.[hole.number])
+            if (!Number.isFinite(gross)) return best
+            const net = floorNetHoleScore(gross, strokeAllocationByPlayerId.get(playerId)?.get(hole.number) || 0)
+            return best === null ? net : Math.min(best, net)
+          }, null)
+
+          const opponentBestNet = opposingModeIds.reduce<number | null>((best, playerId) => {
+            const gross = Number(scoresByPlayerId.get(playerId)?.[hole.number])
+            if (!Number.isFinite(gross)) return best
+            const net = floorNetHoleScore(gross, strokeAllocationByPlayerId.get(playerId)?.get(hole.number) || 0)
+            return best === null ? net : Math.min(best, net)
+          }, null)
+
+          if (teamBestNet === null || opponentBestNet === null) continue
+          decidedHoles += 1
+          if (teamBestNet < opponentBestNet) teamHolesWon += 1
+          if (opponentBestNet < teamBestNet) opponentHolesWon += 1
+        }
+
+        const holesUp = teamHolesWon - opponentHolesWon
+        const teamLabel = groupedModeNames.join(' & ')
+        const oppLabel = opposingModeNames.join(' & ')
+        const statusText = decidedHoles === 0
+          ? 'No holes decided yet.'
+          : holesUp === 0
+            ? `All square through ${decidedHoles}.`
+            : holesUp > 0
+              ? `${teamLabel} up ${holesUp} over ${oppLabel} (through ${decidedHoles}).`
+              : `${oppLabel} up ${Math.abs(holesUp)} over ${teamLabel} (through ${decidedHoles}).`
+
+        return {
+          teamHolesWon,
+          opponentHolesWon,
+          decidedHoles,
+          statusText,
+        }
+      })()
+    : null
 
   return (
     <main className="min-h-screen bg-club-cream text-club-navy p-6 pb-24">
@@ -333,6 +394,14 @@ export default async function ScorecardPage({
                 <p className="text-xs uppercase tracking-wider font-bold text-club-text/60">Best Ball Team</p>
                 <p className="text-base font-serif font-bold text-club-navy">{groupedModeNames.join(' · ')}</p>
                 <p className="text-[11px] text-club-text/50 mt-0.5">Each player enters their own gross score. The best net ball counts on each hole.</p>
+                {isBestBallMatchPlay && opposingModeNames.length > 0 ? (
+                  <>
+                    <p className="text-[11px] text-club-text/70 mt-1">Opponents: <span className="font-semibold text-club-navy">{opposingModeNames.join(' · ')}</span></p>
+                    {matchPlaySummary ? (
+                      <p className="text-[11px] text-club-text/70 mt-1">Match Status: <span className="font-semibold text-club-navy">{matchPlaySummary.statusText}</span></p>
+                    ) : null}
+                  </>
+                ) : null}
               </div>
             ) : (
               <div className="mb-3 bg-club-paper border border-club-gold/30 rounded-lg px-3 py-2">
@@ -432,6 +501,67 @@ export default async function ScorecardPage({
                           )
                         })}
                       </div>
+
+                      {isBestBallMatchPlay && opposingModeIds.length > 0 && (
+                        <>
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-club-text/60 mb-2">Opponents</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {opposingModeIds.map((opponentId) => {
+                                const opponentName = participantById.get(opponentId)?.profiles?.full_name || 'Golfer'
+                                const opponentGross = Number(scoresByPlayerId.get(opponentId)?.[hole.number])
+                                const opponentStrokes = strokeAllocationByPlayerId.get(opponentId)?.get(hole.number) || 0
+                                const opponentNet = Number.isFinite(opponentGross)
+                                  ? floorNetHoleScore(opponentGross, opponentStrokes)
+                                  : null
+
+                                return (
+                                  <div key={`${opponentId}-${hole.number}`} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                    <span className="block text-[11px] font-bold uppercase tracking-wider text-club-text/60 truncate">
+                                      {opponentName}
+                                    </span>
+                                    <span className="block text-[10px] text-gray-400 mt-0.5">
+                                      Strokes on hole: {opponentStrokes} ({strokeDots(opponentStrokes)})
+                                    </span>
+                                    <span className="block text-[10px] text-gray-400 mt-0.5">
+                                      Gross {Number.isFinite(opponentGross) ? opponentGross : '--'} • Net {opponentNet ?? '--'}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="mt-2 text-[11px]">
+                            {(() => {
+                              const teamBestNet = groupedModeIds.reduce<number | null>((best, playerId) => {
+                                const gross = Number(scoresByPlayerId.get(playerId)?.[hole.number])
+                                if (!Number.isFinite(gross)) return best
+                                const net = floorNetHoleScore(gross, strokeAllocationByPlayerId.get(playerId)?.get(hole.number) || 0)
+                                return best === null ? net : Math.min(best, net)
+                              }, null)
+
+                              const opponentBestNet = opposingModeIds.reduce<number | null>((best, playerId) => {
+                                const gross = Number(scoresByPlayerId.get(playerId)?.[hole.number])
+                                if (!Number.isFinite(gross)) return best
+                                const net = floorNetHoleScore(gross, strokeAllocationByPlayerId.get(playerId)?.get(hole.number) || 0)
+                                return best === null ? net : Math.min(best, net)
+                              }, null)
+
+                              if (teamBestNet === null || opponentBestNet === null) {
+                                return <p className="text-gray-500">Hole winner: waiting on both teams.</p>
+                              }
+                              if (teamBestNet < opponentBestNet) {
+                                return <p className="text-emerald-700 font-semibold">Hole winner: Your team ({teamBestNet} vs {opponentBestNet})</p>
+                              }
+                              if (opponentBestNet < teamBestNet) {
+                                return <p className="text-red-700 font-semibold">Hole winner: Opponents ({opponentBestNet} vs {teamBestNet})</p>
+                              }
+                              return <p className="text-club-navy font-semibold">Hole winner: Halved ({teamBestNet} vs {opponentBestNet})</p>
+                            })()}
+                          </div>
+                        </>
+                      )}
                     </div>
                   )) : course.holes.map((hole: any) => {
                     const currentVal = scores[hole.number]
