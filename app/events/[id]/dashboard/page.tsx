@@ -15,9 +15,11 @@ import {
 	BarChart3
 } from 'lucide-react'
 import CopyInviteButton from './CopyInviteButton'
+import EmailSummaryButton from './EmailSummaryButton'
+import CustomEmailButton from './CustomEmailButton'
 import TrashTalk from '../chat/TrashTalk'
 import CollapsibleLeaderboard from './CollapsibleLeaderboard'
-import { activateLeaderboard, deactivateLeaderboard, emailDailySummary, postAnnouncement } from './actions'
+import { activateLeaderboard, deactivateLeaderboard, postAnnouncement } from './actions'
 import { allocateStrokesByHole, calculateNetTotal, clampHandicap, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 import { getDefaultLeaderboardGroupSize, normalizeLeaderboardGroupSize } from '@/lib/game_modes'
 import { calculateStableford666TotalPoints, getStableford666Name } from '@/lib/stableford_666'
@@ -980,13 +982,8 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 									</form>
 								)}
 								<CopyInviteButton eventId={id} />
-								<form action={emailDailySummary}>
-									<input type="hidden" name="eventId" value={id} />
-									<input type="hidden" name="roundId" value={currentRound?.id || ''} />
-									<button className="bg-club-gold text-club-navy py-2 px-3 rounded-sm uppercase tracking-wide text-xs font-bold hover:bg-club-navy hover:text-white transition-all">
-										Email Daily Summary
-									</button>
-								</form>
+                                                                <EmailSummaryButton eventId={id} roundId={currentRound?.id || ''} />
+                                                                <CustomEmailButton eventId={id} />
 							</div>
 						</div>
 						<div className="grid grid-cols-3 gap-3">

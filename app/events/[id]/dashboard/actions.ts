@@ -230,13 +230,20 @@ export async function deactivateLeaderboard(formData: FormData) {
   revalidatePath(`/events/${eventId}/announcements`)
 }
 
-export async function emailDailySummary(formData: FormData) {
+export async function emailDailySummary(formData: FormData): Promise<{
+  sent: number
+  failed: number
+  errors: string[]
+  testMode: boolean
+  noRound?: boolean
+  noRecipients?: boolean
+}> {
   const eventId = formData.get('eventId') as string
   const explicitRoundId = formData.get('roundId') as string
-  if (!eventId) return
+  if (!eventId) return { sent: 0, failed: 0, errors: ['Missing eventId'], testMode: false }
 
   const auth = await requireOrganizer(eventId)
-  if (!auth) return
+  if (!auth) return { sent: 0, failed: 0, errors: ['Not authorized'], testMode: false }
   const { supabase, event } = auth
 
   const { data: roundsData } = await supabase
@@ -250,7 +257,7 @@ export async function emailDailySummary(formData: FormData) {
     ? rounds.find((item: any) => item.id === explicitRoundId)
     : rounds.find((item: any) => item.date === today) || [...rounds].reverse().find((item: any) => item.date <= today)
 
-  if (!round) return
+  if (!round) return { sent: 0, failed: 0, errors: [], testMode: false, noRound: true }
 
   const holes = Array.isArray(round.course_data?.holes) ? round.course_data.holes : []
 
@@ -425,28 +432,144 @@ export async function emailDailySummary(formData: FormData) {
     ? `<ul>${worstFive.map((item) => `<li>${item.player} — Hole ${item.hole}: ${item.score} (Par ${item.par})</li>`).join('')}</ul>`
     : '<p>No high-score outliers recorded.</p>'
 
-  await Promise.allSettled(
-    participantsWithEmail.map((participant: any) =>
-      sendEmail({
-        to: participant.profile.email,
-        subject: `[${event.name}] Daily Summary — ${formattedDate}`,
-        html: `
-          <h2>${event.name} — Daily Summary</h2>
-          <p><strong>Date:</strong> ${formattedDate}</p>
-          <p><strong>Format:</strong> ${round.mode_key || 'round'}</p>
+  if (participantsWithEmail.length === 0) {
+    return { sent: 0, failed: 0, errors: [], testMode: !!process.env.EMAIL_TEST_MODE_TO, noRecipients: true }
+  }
 
-          <h3>Overall Results</h3>
-          ${resultsHtml}
+  const testModeTo = process.env.EMAIL_TEST_MODE_TO?.trim()
+  const emailBody = `
+    <h2>${event.name} — Daily Summary</h2>
+    <p><strong>Date:</strong> ${formattedDate}</p>
+    <p><strong>Format:</strong> ${round.mode_key || 'round'}</p>
 
-          <h3>Notable Shots</h3>
-          <p><strong>Birdies:</strong> ${birdies} &nbsp;|&nbsp; <strong>Eagles or Better:</strong> ${eagles} &nbsp;|&nbsp; <strong>Hole in Ones:</strong> ${holeInOnes}</p>
+    <h3>Overall Results</h3>
+    ${resultsHtml}
 
-          <h3>Highest Scores (Toughest Holes)</h3>
-          ${worstHtml}
+    <h3>Notable Shots</h3>
+    <p><strong>Birdies:</strong> ${birdies} &nbsp;|&nbsp; <strong>Eagles or Better:</strong> ${eagles} &nbsp;|&nbsp; <strong>Hole in Ones:</strong> ${holeInOnes}</p>
 
-          <p>See the app dashboard for full card details.</p>
-        `,
-      })
-    )
-  )
+    <h3>Highest Scores (Toughest Holes)</h3>
+    ${worstHtml}
+
+    <p>See the app dashboard for full card details.</p>
+  `
+
+  // In test mode: send just ONE email to your address with all intended recipients listed
+  if (testModeTo) {
+    const recipientList = participantsWithEmail.map((p: any) => p.profile.email).join(', ')
+    const result = await sendEmail({
+      to: testModeTo,
+      subject: `[TEST ${participantsWithEmail.length} recipients] [${event.name}] Daily Summary — ${formattedDate}`,
+      html: `<p><strong>TEST MODE.</strong> This would have been sent to: ${recipientList}</p><hr>${emailBody}`,
+    })
+    return {
+      sent: result.ok ? 1 : 0,
+      failed: result.ok ? 0 : 1,
+      errors: result.ok ? [] : [`${testModeTo}: ${result.error ?? 'unknown error'}`],
+      testMode: true,
+    }
+  }
+
+  // Production: send one at a time with a 250ms gap to stay under 5 req/sec
+  let sent = 0
+  let failed = 0
+  const errors: string[] = []
+
+  for (const participant of participantsWithEmail) {
+    const email = (participant as any).profile?.email ?? 'unknown'
+    const result = await sendEmail({
+      to: email,
+      subject: `[${event.name}] Daily Summary — ${formattedDate}`,
+      html: emailBody,
+    })
+    if (result.ok) {
+      sent++
+    } else {
+      failed++
+      errors.push(`${email}: ${result.error ?? 'unknown error'}`)
+    }
+    // 250ms between sends → max ~4/sec, well under Resend's 5/sec limit
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+
+  return { sent, failed, errors, testMode: false }
+}
+
+export async function sendCustomEmail(formData: FormData): Promise<{
+  sent: number
+  failed: number
+  errors: string[]
+  testMode: boolean
+  noRecipients?: boolean
+}> {
+  const eventId = formData.get('eventId') as string
+  const subject = formData.get('subject') as string
+  const html = formData.get('html') as string
+
+  if (!eventId || !subject || !html) {
+    return { sent: 0, failed: 0, errors: ['Missing required fields'], testMode: false }
+  }
+
+  const auth = await requireOrganizer(eventId)
+  if (!auth) return { sent: 0, failed: 0, errors: ['Not authorized'], testMode: false }
+  const { supabase } = auth
+
+  const { data: participantsData } = await supabase
+    .from('event_participants')
+    .select('user_id, profiles:user_id(full_name, email)')
+    .eq('event_id', eventId)
+
+  const participants = participantsData || []
+  const participantsWithEmail = participants
+    .map((row: any) => ({
+      userId: row.user_id,
+      profile: Array.isArray(row.profiles) ? row.profiles[0] : row.profiles,
+    }))
+    .filter((row: any) => row.profile?.email)
+
+  if (participantsWithEmail.length === 0) {
+    return { sent: 0, failed: 0, errors: [], testMode: !!process.env.EMAIL_TEST_MODE_TO, noRecipients: true }
+  }
+
+  const testModeTo = process.env.EMAIL_TEST_MODE_TO?.trim()
+
+  // In test mode: send just ONE email to your address with all intended recipients listed
+  if (testModeTo) {
+    const recipientList = participantsWithEmail.map((p: any) => p.profile.email).join(', ')
+    const result = await sendEmail({
+      to: testModeTo,
+      subject: `[TEST ${participantsWithEmail.length} recipients] ${subject}`,
+      html: `<p><strong>TEST MODE.</strong> This would have been sent to: ${recipientList}</p><hr>${html}`,
+    })
+    return {
+      sent: result.ok ? 1 : 0,
+      failed: result.ok ? 0 : 1,
+      errors: result.ok ? [] : [`${testModeTo}: ${result.error ?? 'unknown error'}`],
+      testMode: true,
+    }
+  }
+
+  // Production: send one at a time with a 250ms gap to stay under 5 req/sec
+  let sent = 0
+  let failed = 0
+  const errors: string[] = []
+
+  for (const participant of participantsWithEmail) {
+    const email = (participant as any).profile?.email ?? 'unknown'
+    const result = await sendEmail({
+      to: email,
+      subject,
+      html,
+    })
+    if (result.ok) {
+      sent++
+    } else {
+      failed++
+      errors.push(`${email}: ${result.error ?? 'unknown error'}`)
+    }
+    // 250ms between sends → max ~4/sec, well under Resend's 5/sec limit
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+
+  return { sent, failed, errors, testMode: false }
 }
