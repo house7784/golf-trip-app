@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { sendEmail } from '@/lib/email'
+import { clampHandicap, type HandicapApplicationMode } from '@/lib/handicap'
 import { calculateStableford666TotalPoints, getStableford666Data } from '@/lib/stableford_666'
 
 const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
@@ -33,7 +34,7 @@ async function requireOrganizer(eventId: string) {
 
   const { data: event } = await supabase
     .from('events')
-    .select('id, name, created_by')
+    .select('id, name, created_by, handicap_cap, handicap_application')
     .eq('id', eventId)
     .single()
 
@@ -245,6 +246,11 @@ export async function emailDailySummary(formData: FormData): Promise<{
   const auth = await requireOrganizer(eventId)
   if (!auth) return { sent: 0, failed: 0, errors: ['Not authorized'], testMode: false }
   const { supabase, event } = auth
+  const handicapCap = (event as any)?.handicap_cap ?? null
+  const handicapApplication: HandicapApplicationMode =
+    (event as any)?.handicap_application === 'par3_one_then_next_hardest'
+      ? 'par3_one_then_next_hardest'
+      : 'standard'
 
   const { data: roundsData } = await supabase
     .from('rounds')
@@ -316,10 +322,10 @@ export async function emailDailySummary(formData: FormData): Promise<{
           pairIds.map((id: string) => {
             const participant = participants.find((row: any) => row.user_id === id)
             const profile = profileById.get(id)
-            return [id, Number(participant?.event_handicap ?? profile?.handicap_index ?? 0)]
+            return [id, clampHandicap(Number(participant?.event_handicap ?? profile?.handicap_index ?? 0), handicapCap)]
           })
         )
-        const score = calculateStableford666TotalPoints(payload, holes, handicapByPlayerId)
+        const score = calculateStableford666TotalPoints(payload, holes, handicapByPlayerId, handicapApplication)
         const label = pairIds.map((id: string) => getDisplayName(profileById.get(id))).join(' & ')
         topRows.push({ label, score })
       })

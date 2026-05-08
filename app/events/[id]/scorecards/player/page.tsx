@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
-import { allocateStrokesByHole, calculateNetTotal, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
+import { allocateStrokesByHole, calculateNetTotal, clampHandicap, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 import {
   calculateStableford666HoleSummary,
   calculateStableford666TotalPoints,
@@ -102,6 +102,13 @@ function renderClassicScorecard(
                 </div>
               ))}
               <div className="px-1 py-2 text-center text-sm border-t text-club-navy font-bold">{parTotal}</div>
+
+              {section.holes.map((hole) => (
+                <div key={`${section.label}-hcp-${hole.number}`} className="px-1 py-1 text-center text-xs border-t border-r border-gray-100 text-club-navy/70">
+                  HCP {hole.hcp ?? '--'}
+                </div>
+              ))}
+              <div className="px-1 py-1 text-center text-xs border-t text-club-navy/70 font-bold">HCP</div>
 
               {section.holes.map((hole) => {
                 const gross = numericHoleScore(holeScores, hole.number)
@@ -219,9 +226,11 @@ export default async function PlayerScorecardsPage({
 
   const { data: eventSettings } = await supabase
     .from('events')
-    .select('handicap_application')
+    .select('handicap_cap, handicap_application')
     .eq('id', id)
     .maybeSingle()
+
+  const handicapCap = eventSettings?.handicap_cap ?? null
 
   const handicapApplication: HandicapApplicationMode =
     eventSettings?.handicap_application === 'par3_one_then_next_hardest'
@@ -278,14 +287,14 @@ export default async function PlayerScorecardsPage({
   const handicapByPlayerId = Object.fromEntries(
     participants.map((entry: any) => [
       entry.user_id,
-      Number(entry.event_handicap ?? normalizeProfile(entry.profiles)?.handicap_index ?? 0),
+      clampHandicap(Number(entry.event_handicap ?? normalizeProfile(entry.profiles)?.handicap_index ?? 0), handicapCap),
     ])
   )
 
   const playerName = getDisplayName(normalizeProfile(playerParticipant.profiles))
-  const selectedPlayerHandicap = Number(
+  const selectedPlayerHandicap = clampHandicap(Number(
     playerParticipant.event_handicap ?? normalizeProfile(playerParticipant.profiles)?.handicap_index ?? 0
-  )
+  ), handicapCap)
 
   return (
     <main className="min-h-screen bg-club-cream text-club-navy p-6 pb-24">
@@ -326,7 +335,7 @@ export default async function PlayerScorecardsPage({
             const partnerIds = pairIds.filter((value) => value !== playerId)
             const partnerId = partnerIds[0] || null
             const partnerName = partnerId ? getDisplayName(profileByUserId.get(partnerId)) : 'Partner'
-            const playerHandicap = Number(handicapByPlayerId[playerId] ?? 0)
+            const playerHandicap = clampHandicap(Number(handicapByPlayerId[playerId] ?? 0), handicapCap)
             const playerAllocations = allocateStrokesByHole(holes as CourseHole[], playerHandicap, handicapApplication)
             const playerNetTotal = calculateNetTotal(playerScores, holes as CourseHole[], playerHandicap, handicapApplication)
 
@@ -361,7 +370,7 @@ export default async function PlayerScorecardsPage({
 
             if (round.mode_key === 'best_ball') {
               const partnerScores = partnerId ? scoreByRoundUser.get(`${round.id}:${partnerId}`) || {} : {}
-              const partnerHandicap = Number(handicapByPlayerId[partnerId || ''] ?? 0)
+              const partnerHandicap = clampHandicap(Number(handicapByPlayerId[partnerId || ''] ?? 0), handicapCap)
               const partnerAllocations = allocateStrokesByHole(holes as CourseHole[], partnerHandicap, handicapApplication)
               const individualTotal = totalScore(playerScores)
               const pairTotal = holes.reduce((sum: number, hole: any) => {
@@ -441,8 +450,8 @@ export default async function PlayerScorecardsPage({
 
             if (round.mode_key === 'stableford') {
               const data = getStableford666Data(playerScores)
-              const totalPoints = calculateStableford666TotalPoints(playerScores, holes, handicapByPlayerId)
-              const stablefordAllocations = getStableford666Allocations(holes as CourseHole[], handicapByPlayerId)
+              const totalPoints = calculateStableford666TotalPoints(playerScores, holes, handicapByPlayerId, handicapApplication)
+              const stablefordAllocations = getStableford666Allocations(holes as CourseHole[], handicapByPlayerId, handicapApplication)
               const sharedHoles = holes.filter((hole: any) => hole.number <= 12)
               const bestBallHoles = holes.filter((hole: any) => hole.number > 12)
 
@@ -464,7 +473,7 @@ export default async function PlayerScorecardsPage({
                     <div className="divide-y divide-gray-100">
                       {sharedHoles.map((hole: any) => {
                         const holeData = data.holes[String(hole.number)] || {}
-                        const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes)
+                        const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes, handicapApplication)
                         const segmentLabel = getStableford666SegmentLabel(hole.number)
                         return (
                           <div key={`shared-${hole.number}`} className="px-1 py-2 text-sm">
@@ -493,14 +502,16 @@ export default async function PlayerScorecardsPage({
                     <div className="divide-y divide-gray-100">
                       {bestBallHoles.map((hole: any) => {
                         const holeData = data.holes[String(hole.number)] || {}
-                        const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes)
+                        const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes, handicapApplication)
                         const myScore = holeData?.playerScores?.[playerId]
                         const partnerScore = partnerId ? holeData?.playerScores?.[partnerId] : null
+                        const myStrokes = stablefordAllocations.get(playerId)?.get(hole.number) || 0
+                        const partnerStrokes = partnerId ? stablefordAllocations.get(partnerId)?.get(hole.number) || 0 : 0
                         const myNet = Number.isFinite(Number(myScore))
-                          ? floorNetHoleScore(Number(myScore), stablefordAllocations.get(playerId)?.get(hole.number) || 0)
+                          ? floorNetHoleScore(Number(myScore), myStrokes)
                           : null
                         const partnerNet = partnerId && Number.isFinite(Number(partnerScore))
-                          ? floorNetHoleScore(Number(partnerScore), stablefordAllocations.get(partnerId)?.get(hole.number) || 0)
+                          ? floorNetHoleScore(Number(partnerScore), partnerStrokes)
                           : null
                         const bestNet = myNet === null && partnerNet === null
                           ? '--'
@@ -519,7 +530,7 @@ export default async function PlayerScorecardsPage({
                               <span className="font-semibold text-club-gold">Pts {summary.totalPoints} • Best Net {bestNet}</span>
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                              {playerName}: {myScore ?? '--'} ({myNet ?? '--'}) • {partnerName}: {partnerScore ?? '--'} ({partnerNet ?? '--'}) • Drinks B/C/S: {holeData.beers || 0}/{holeData.cocktails || 0}/{holeData.shots || 0} • Bonuses: {holeData.fairwayHit ? 'FWY ' : ''}{holeData.gir ? 'GIR ' : ''}{holeData.onePutt ? '1Putt ' : ''}{holeData.chipIn ? 'ChipIn' : ''}
+                              {playerName}: {myScore ?? '--'} {myStrokes > 0 ? `(${myStrokes} stroke${myStrokes > 1 ? 's' : ''})` : ''} ({myNet ?? '--'}) • {partnerName}: {partnerScore ?? '--'} {partnerStrokes > 0 ? `(${partnerStrokes} stroke${partnerStrokes > 1 ? 's' : ''})` : ''} ({partnerNet ?? '--'}) • Drinks B/C/S: {holeData.beers || 0}/{holeData.cocktails || 0}/{holeData.shots || 0} • Bonuses: {holeData.fairwayHit ? 'FWY ' : ''}{holeData.gir ? 'GIR ' : ''}{holeData.onePutt ? '1Putt ' : ''}{holeData.chipIn ? 'ChipIn' : ''}
                             </div>
                           </div>
                         )

@@ -6,11 +6,16 @@ import { updateEventHandicapSettings, updateParticipantEventHandicap } from './a
 
 export default async function EventHandicapsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{ status?: string; message?: string }>
 }) {
   const supabase = await createClient()
   const { id } = await params
+  const query = await searchParams
+  const status = query?.status || ''
+  const message = query?.message || ''
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -37,6 +42,16 @@ export default async function EventHandicapsPage({
     .eq('event_id', id)
     .order('created_at', { ascending: true })
 
+  const currentCapLabel = event?.handicap_cap === null || event?.handicap_cap === undefined
+    ? 'No cap'
+    : String(event.handicap_cap)
+  const currentMode = event?.handicap_application === 'par3_one_then_next_hardest'
+    ? 'par3_one_then_next_hardest'
+    : 'standard'
+  const currentModeLabel = currentMode === 'par3_one_then_next_hardest'
+    ? 'Par 3 One Stroke Then Hardest Par 4/5'
+    : 'Standard Stroke Allocation'
+
   return (
     <main className="min-h-screen bg-club-cream text-club-navy p-6 pb-20">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -52,6 +67,27 @@ export default async function EventHandicapsPage({
 
         <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
           <h2 className="font-serif text-lg mb-3">Handicap Rules</h2>
+
+          {status === 'saved' ? (
+            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+              Handicap rules saved.
+            </div>
+          ) : null}
+
+          {status === 'error' && message ? (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+              {message}
+            </div>
+          ) : null}
+
+          <div className="mb-4 rounded-lg border border-club-navy/10 bg-club-cream/60 px-3 py-3">
+            <p className="text-[11px] uppercase tracking-wider font-bold text-club-text/60 mb-2">Current Rules</p>
+            <div className="grid gap-2 md:grid-cols-2 text-sm">
+              <p><span className="font-semibold text-club-text/70">Cap:</span> <span className="text-club-navy">{currentCapLabel}</span></p>
+              <p><span className="font-semibold text-club-text/70">Mode:</span> <span className="text-club-navy">{currentModeLabel}</span></p>
+            </div>
+          </div>
+
           <form action={updateEventHandicapSettings} className="grid gap-4 md:grid-cols-2">
             <input type="hidden" name="eventId" value={id} />
 
@@ -81,7 +117,7 @@ export default async function EventHandicapsPage({
             </div>
 
             <div className="md:col-span-2">
-              <button className="bg-club-navy text-white px-4 py-2 rounded-sm text-xs font-bold uppercase tracking-wider hover:bg-club-gold hover:text-club-navy transition-colors">
+              <button type="submit" className="bg-club-navy text-black px-4 py-2 rounded-sm text-xs font-bold uppercase tracking-wider hover:bg-club-gold hover:text-club-navy transition-colors">
                 Save Handicap Rules
               </button>
             </div>

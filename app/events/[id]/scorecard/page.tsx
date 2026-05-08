@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ChevronLeft, Save } from 'lucide-react'
 import { submitBestBallScores, submitScore, submitScrambleScore } from './actions'
 import Stableford666Scorecard from './Stableford666Scorecard'
-import { allocateStrokesByHole, type HandicapApplicationMode } from '@/lib/handicap'
+import { allocateStrokesByHole, clampHandicap, type HandicapApplicationMode } from '@/lib/handicap'
 
 function samePair(slotA: number, slotB: number) {
   return (slotA <= 2 && slotB <= 2) || (slotA >= 3 && slotB >= 3)
@@ -53,9 +53,11 @@ export default async function ScorecardPage({
 
   const { data: event } = await supabase
     .from('events')
-    .select('created_by, handicap_application')
+    .select('created_by, handicap_cap, handicap_application')
     .eq('id', id)
     .single()
+
+  const handicapCap = event?.handicap_cap ?? null
 
   const handicapApplication: HandicapApplicationMode =
     event?.handicap_application === 'par3_one_then_next_hardest'
@@ -205,7 +207,7 @@ export default async function ScorecardPage({
   const scoreHoles = (course.holes || []) as any[]
   const strokeAllocationByPlayerId = new Map<string, Map<number, number>>()
   ;(participants || []).forEach((entry: any) => {
-    const handicap = Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0)
+    const handicap = clampHandicap(Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0), handicapCap)
     strokeAllocationByPlayerId.set(
       entry.user_id,
       allocateStrokesByHole(scoreHoles, handicap, handicapApplication)
@@ -214,9 +216,9 @@ export default async function ScorecardPage({
   const stablefordPlayers = groupedModeIds.map((playerId) => ({
     id: playerId,
     name: participantById.get(playerId)?.profiles?.full_name || 'Golfer',
-    handicap: Number(
+    handicap: clampHandicap(Number(
       participantById.get(playerId)?.event_handicap ?? participantById.get(playerId)?.profiles?.handicap_index ?? 0
-    ),
+    ), handicapCap),
   }))
 
   return (
@@ -315,6 +317,7 @@ export default async function ScorecardPage({
             canEdit={canEditSelected}
             holes={course.holes || []}
             players={stablefordPlayers}
+            handicapApplication={handicapApplication}
             initialPayload={scoresByPlayerId.get(groupedModeIds[0]) || scores}
           />
         ) : (

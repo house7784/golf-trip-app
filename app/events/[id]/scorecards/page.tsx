@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
-import { allocateStrokesByHole, calculateNetTotal, floorNetHoleScore, type HandicapApplicationMode } from '@/lib/handicap'
+import { allocateStrokesByHole, calculateNetTotal, clampHandicap, floorNetHoleScore, type HandicapApplicationMode } from '@/lib/handicap'
 import {
   calculateStableford666HoleSummary,
   calculateStableford666TotalPoints,
@@ -125,9 +125,11 @@ export default async function PairScorecardsPage({
 
   const { data: eventSettings } = await supabase
     .from('events')
-    .select('handicap_application')
+    .select('handicap_cap, handicap_application')
     .eq('id', id)
     .maybeSingle()
+
+  const handicapCap = eventSettings?.handicap_cap ?? null
 
   const handicapApplication: HandicapApplicationMode =
     eventSettings?.handicap_application === 'par3_one_then_next_hardest'
@@ -190,23 +192,23 @@ export default async function PairScorecardsPage({
             const handicapByPlayerId = Object.fromEntries(
               participants.map((entry: any) => [
                 entry.user_id,
-                Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0),
+                clampHandicap(Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0), handicapCap),
               ])
             )
             const stablefordData1 = getStableford666Data(scores1)
             const stablefordData2 = getStableford666Data(scores2)
             const stablefordData = Object.keys(stablefordData1.holes).length > 0 ? stablefordData1 : stablefordData2
-            const stablefordAllocations = getStableford666Allocations(holes, handicapByPlayerId)
+            const stablefordAllocations = getStableford666Allocations(holes, handicapByPlayerId, handicapApplication)
             const stablefordTotals = { finishing: 0, hitting: 0, drinks: 0 }
             holes.forEach((hole: any) => {
               const holeData = stablefordData.holes[String(hole.number)] || {}
-              const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes)
+              const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes, handicapApplication)
               stablefordTotals.finishing += summary.finishingPoints
               stablefordTotals.hitting += summary.hittingPoints
               stablefordTotals.drinks += summary.drinksPoints
             })
-            const totalPoints = calculateStableford666TotalPoints(scores1, holes, handicapByPlayerId) +
-                               calculateStableford666TotalPoints(scores2, holes, handicapByPlayerId)
+            const totalPoints = calculateStableford666TotalPoints(scores1, holes, handicapByPlayerId, handicapApplication) +
+                               calculateStableford666TotalPoints(scores2, holes, handicapByPlayerId, handicapApplication)
 
             return (
               <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -226,7 +228,7 @@ export default async function PairScorecardsPage({
                       const segment = getStableford666Segment(hole.number)
                       const segmentLabel = getStableford666SegmentLabel(hole.number)
                       const holeData = stablefordData.holes[String(hole.number)] || {}
-                      const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes)
+                      const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes, handicapApplication)
                       const numericScore1 = numericHoleScore(scores1, hole.number)
                       const numericScore2 = numericHoleScore(scores2, hole.number)
                       const player1Net = Number.isFinite(Number(numericScore1))
@@ -316,16 +318,16 @@ export default async function PairScorecardsPage({
           {participants.map((participant: any) => {
             const playerName = getDisplayName(participant.profiles)
             const scores = scoreByUserId.get(participant.user_id) || {}
-            const playerHandicap = Number(participant.event_handicap ?? participant.profiles?.handicap_index ?? 0)
+            const playerHandicap = clampHandicap(Number(participant.event_handicap ?? participant.profiles?.handicap_index ?? 0), handicapCap)
             const allocations = allocateStrokesByHole(holes, playerHandicap, handicapApplication)
             const handicapByPlayerId = Object.fromEntries(
               participants.map((entry: any) => [
                 entry.user_id,
-                Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0),
+                clampHandicap(Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0), handicapCap),
               ])
             )
             const total = activeRound.mode_key === 'stableford'
-              ? calculateStableford666TotalPoints(scores, holes, handicapByPlayerId)
+              ? calculateStableford666TotalPoints(scores, holes, handicapByPlayerId, handicapApplication)
               : totalScore(scores)
             const netTotal = calculateNetTotal(scores, holes, playerHandicap, handicapApplication)
 

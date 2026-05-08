@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Minus, Plus, Save } from 'lucide-react'
-import type { CourseHole } from '@/lib/handicap'
+import type { CourseHole, HandicapApplicationMode } from '@/lib/handicap'
 import {
   buildStableford666Payload,
   getStableford666Allocations,
@@ -29,6 +29,7 @@ type Props = {
   canEdit: boolean
   holes: CourseHole[]
   players: Player[]
+  handicapApplication: HandicapApplicationMode
   initialPayload: Record<string, any> | null | undefined
 }
 
@@ -45,6 +46,7 @@ export default function Stableford666Scorecard({
   canEdit,
   holes,
   players,
+  handicapApplication,
   initialPayload,
 }: Props) {
   const router = useRouter()
@@ -58,13 +60,13 @@ export default function Stableford666Scorecard({
   )
 
   const totalPoints = useMemo(
-    () => calculateStableford666TotalPoints({ _stableford666: data }, holes, handicapByPlayerId),
-    [data, holes, handicapByPlayerId]
+    () => calculateStableford666TotalPoints({ _stableford666: data }, holes, handicapByPlayerId, handicapApplication),
+    [data, holes, handicapByPlayerId, handicapApplication]
   )
 
   const allocationsByPlayer = useMemo(
-    () => getStableford666Allocations(holes, handicapByPlayerId),
-    [holes, handicapByPlayerId]
+    () => getStableford666Allocations(holes, handicapByPlayerId, handicapApplication),
+    [holes, handicapByPlayerId, handicapApplication]
   )
 
   const updateHole = (holeNumber: number, patch: Record<string, any>) => {
@@ -108,7 +110,7 @@ export default function Stableford666Scorecard({
 
     startTransition(async () => {
       try {
-        const payload = buildStableford666Payload(data, holes, handicapByPlayerId)
+        const payload = buildStableford666Payload(data, holes, handicapByPlayerId, handicapApplication)
         await submitStableford666Score(
           eventId,
           roundId,
@@ -172,26 +174,36 @@ export default function Stableford666Scorecard({
 
               {isBestBallHole ? (
                 <div className="grid grid-cols-2 gap-2">
-                  {players.map((player) => (
-                    <label key={`${player.id}-${hole.number}`} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                      <span className="block text-[11px] font-bold uppercase tracking-wider text-club-text/60 truncate">
-                        {player.name}
-                      </span>
-                      <span className="block text-[10px] text-gray-400 mb-1">
-                        Handicap / 3: {(player.handicap / 3).toFixed(1)} • Strokes here: {allocationsByPlayer.get(player.id)?.get(hole.number) || 0}
-                      </span>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={holeData.playerScores?.[player.id] ?? ''}
-                        onChange={(event) => updatePlayerScore(hole.number, player.id, event.target.value)}
-                        disabled={!canEdit || pending}
-                        className="w-full bg-transparent text-center text-2xl outline-none text-club-navy"
-                        placeholder="-"
-                      />
-                    </label>
-                  ))}
+                  {players.map((player) => {
+                    const strokes = allocationsByPlayer.get(player.id)?.get(hole.number) || 0
+                    return (
+                      <label key={`${player.id}-${hole.number}`} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <span className="block text-[11px] font-bold uppercase tracking-wider text-club-text/60 truncate flex-1">
+                            {player.name}
+                          </span>
+                          {strokes > 0 && (
+                            <span className="inline-block rounded-full bg-club-gold text-club-navy px-2 py-0.5 text-[10px] font-bold whitespace-nowrap">
+                              +{strokes} stroke{strokes !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                        <span className="block text-[10px] text-gray-400 mb-1">
+                          Handicap / 3: {(player.handicap / 3).toFixed(1)}
+                        </span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={holeData.playerScores?.[player.id] ?? ''}
+                          onChange={(event) => updatePlayerScore(hole.number, player.id, event.target.value)}
+                          disabled={!canEdit || pending}
+                          className="w-full bg-transparent text-center text-2xl outline-none text-club-navy"
+                          placeholder="-"
+                        />
+                      </label>
+                    )
+                  })}
                 </div>
               ) : (
                 <label className="block rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">

@@ -493,7 +493,7 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 					label: entry.label,
 					memberNames: entry.memberNames,
 					memberIds: entry.memberIds,
-					score: payload ? calculateStableford666TotalPoints(payload, holes, handicapByPlayerId) : null,
+					score: payload ? calculateStableford666TotalPoints(payload, holes, handicapByPlayerId, handicapApplication) : null,
 				}
 			})
 			.sort((a, b) => {

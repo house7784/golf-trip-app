@@ -1,4 +1,4 @@
-import { allocateStrokesByHole, floorNetHoleScore, type CourseHole } from '@/lib/handicap'
+import { allocateStrokesByHole, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 
 export type Stableford666HoleData = {
   teamScore?: number | null
@@ -61,7 +61,8 @@ export function getStableford666ReducedHandicap(handicap: number | null | undefi
 
 export function getStableford666Allocations(
   holes: CourseHole[],
-  handicapByPlayerId: Record<string, number>
+  handicapByPlayerId: Record<string, number>,
+  mode: HandicapApplicationMode = 'standard'
 ) {
   const lastSixHoles = holes.filter((hole) => hole.number >= 13)
   const allocations = new Map<string, Map<number, number>>()
@@ -69,7 +70,7 @@ export function getStableford666Allocations(
   Object.entries(handicapByPlayerId).forEach(([playerId, handicap]) => {
     allocations.set(
       playerId,
-      allocateStrokesByHole(lastSixHoles, getStableford666ReducedHandicap(handicap), 'standard')
+      allocateStrokesByHole(lastSixHoles, getStableford666ReducedHandicap(handicap), mode)
     )
   })
 
@@ -90,10 +91,11 @@ export function calculateStableford666HoleSummary(
   hole: CourseHole,
   holeData: Stableford666HoleData,
   handicapByPlayerId: Record<string, number>,
-  allHoles: CourseHole[]
+  allHoles: CourseHole[],
+  mode: HandicapApplicationMode = 'standard'
 ) {
   const segment = getStableford666Segment(hole.number)
-  const allocations = getStableford666Allocations(allHoles, handicapByPlayerId)
+  const allocations = getStableford666Allocations(allHoles, handicapByPlayerId, mode)
 
   let scoringValue: number | null = null
   let holeInOne = false
@@ -143,19 +145,21 @@ export function calculateStableford666HoleSummary(
 export function calculateStableford666TotalPoints(
   payload: Record<string, any> | null | undefined,
   holes: CourseHole[],
-  handicapByPlayerId: Record<string, number>
+  handicapByPlayerId: Record<string, number>,
+  mode: HandicapApplicationMode = 'standard'
 ) {
   const data = getStableford666Data(payload)
   return holes.reduce((sum, hole) => {
     const holeData = data.holes[String(hole.number)] || {}
-    return sum + calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes).totalPoints
+    return sum + calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes, mode).totalPoints
   }, 0)
 }
 
 export function buildStableford666Payload(
   data: Stableford666Data,
   holes: CourseHole[],
-  handicapByPlayerId: Record<string, number>
+  handicapByPlayerId: Record<string, number>,
+  mode: HandicapApplicationMode = 'standard'
 ) {
   const payload: Record<string, any> = {
     [STABLEFORD_666_STORAGE_KEY]: data,
@@ -163,7 +167,7 @@ export function buildStableford666Payload(
 
   holes.forEach((hole) => {
     const holeData = data.holes[String(hole.number)] || {}
-    const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes)
+    const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes, mode)
     if (summary.scoringValue !== null) {
       payload[String(hole.number)] = summary.scoringValue
     }
