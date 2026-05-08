@@ -31,8 +31,8 @@ export default function CourseSetup({ eventId, roundId, initialData, initialName
   }
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-md">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col relative">
+    <div className="fixed inset-0 bg-black/90 z-50 flex items-start justify-center p-4 pt-8 overflow-y-auto backdrop-blur-md">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl flex flex-col relative mb-8">
         
         {/* CLOSE BUTTON */}
         <button 
@@ -87,7 +87,7 @@ export default function CourseSetup({ eventId, roundId, initialData, initialName
              <button onClick={resetToPar72} className="text-xs font-bold uppercase text-gray-400 hover:text-black flex items-center gap-2">
                 <RotateCcw size={14} /> Reset Defaults
             </button>
-            <button onClick={handleSave} className="bg-club-navy text-white py-4 px-12 rounded-lg font-bold uppercase tracking-widest shadow-lg hover:bg-club-gold hover:text-club-navy transition text-lg">
+            <button onClick={handleSave} className="bg-club-navy text-Black py-4 px-12 rounded-lg font-bold uppercase tracking-widest shadow-lg hover:bg-club-gold hover:text-club-navy transition text-lg">
                 Save Course
             </button>
         </div>

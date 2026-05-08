@@ -196,6 +196,7 @@ export default async function TeeTimesPage({
                 {isOrganizer && (
                     <>
                         <CourseSetup 
+                            key={activeRound.id}
                             eventId={id} 
                             roundId={activeRound.id} 
                             initialData={activeRound.course_data} 
