@@ -146,7 +146,7 @@ export default function CustomEmailButton({ eventId }: { eventId: string }) {
               type="button"
               onClick={handleSend}
               disabled={busy || !subject.trim() || !body.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-club-navy text-white px-4 py-2 text-sm font-bold hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-club-navy text-Black px-4 py-2 text-sm font-bold hover:bg-club-gold hover:text-club-navy transition disabled:opacity-50"
             >
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               {busy ? 'Sending…' : 'Send to All'}
