@@ -7,6 +7,7 @@ import {
 	Send,
 	Edit,
 	Swords,
+	Vote,
 	MessageCircle,
 	Users,
 	Settings,
@@ -928,6 +929,16 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 						<span className="font-bold text-xs uppercase tracking-wider">Scoring</span>
 					</Link>
 
+					{isOrganizer && (
+						<Link
+							href={`/events/${id}/polls`}
+							className="bg-white text-club-navy p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-2 h-32 active:bg-gray-50 transition"
+						>
+							<Vote size={28} className="text-club-gold" />
+							<span className="font-bold text-xs uppercase tracking-wider">Polls</span>
+						</Link>
+					)}
+
 					<TrashTalk
 						eventId={id}
 						currentUser={currentUser}
@@ -990,10 +1001,16 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 							<Link href={`/events/${id}/handicaps`} className="bg-gray-200 p-3 rounded text-center">
 								<Gauge className="mx-auto mb-1 text-gray-600" size={20} />
 								<span className="text-[10px] font-bold text-gray-600">Handicaps</span>
-							</Link>						<Link href={`/events/${id}/scoring`} className="bg-gray-200 p-3 rounded text-center">
-							<BarChart3 className="mx-auto mb-1 text-gray-600" size={20} />
-							<span className="text-[10px] font-bold text-gray-600">Scoring</span>
-						</Link>						</div>
+							</Link>
+							<Link href={`/events/${id}/scoring`} className="bg-gray-200 p-3 rounded text-center">
+								<BarChart3 className="mx-auto mb-1 text-gray-600" size={20} />
+								<span className="text-[10px] font-bold text-gray-600">Scoring</span>
+							</Link>
+							<Link href={`/events/${id}/polls`} className="bg-gray-200 p-3 rounded text-center">
+								<Vote className="mx-auto mb-1 text-gray-600" size={20} />
+								<span className="text-[10px] font-bold text-gray-600">Polls</span>
+							</Link>
+						</div>
 					</details>
 				)}
 

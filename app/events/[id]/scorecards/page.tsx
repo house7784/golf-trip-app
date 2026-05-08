@@ -2,7 +2,14 @@ import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
 import { allocateStrokesByHole, calculateNetTotal, floorNetHoleScore, type HandicapApplicationMode } from '@/lib/handicap'
-import { calculateStableford666TotalPoints, getStableford666Segment, getStableford666SegmentLabel } from '@/lib/stableford_666'
+import {
+  calculateStableford666HoleSummary,
+  calculateStableford666TotalPoints,
+  getStableford666Allocations,
+  getStableford666Data,
+  getStableford666Segment,
+  getStableford666SegmentLabel,
+} from '@/lib/stableford_666'
 
 function getDisplayName(profile?: { full_name?: string | null; email?: string | null } | null) {
   return profile?.full_name || 'Golfer'
@@ -16,6 +23,10 @@ function totalScore(holeScores: Record<string, number> | null | undefined) {
 function numericHoleScore(holeScores: Record<string, any> | null | undefined, holeNumber: number) {
   const value = Number(holeScores?.[String(holeNumber)] ?? holeScores?.[holeNumber])
   return Number.isFinite(value) ? value : null
+}
+
+function strokeDots(strokes: number) {
+  return strokes > 0 ? '•'.repeat(Math.min(strokes, 6)) : '—'
 }
 
 function scoreMarkerClass(score: number | null, par: number) {
@@ -182,6 +193,18 @@ export default async function PairScorecardsPage({
                 Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0),
               ])
             )
+            const stablefordData1 = getStableford666Data(scores1)
+            const stablefordData2 = getStableford666Data(scores2)
+            const stablefordData = Object.keys(stablefordData1.holes).length > 0 ? stablefordData1 : stablefordData2
+            const stablefordAllocations = getStableford666Allocations(holes, handicapByPlayerId)
+            const stablefordTotals = { finishing: 0, hitting: 0, drinks: 0 }
+            holes.forEach((hole: any) => {
+              const holeData = stablefordData.holes[String(hole.number)] || {}
+              const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes)
+              stablefordTotals.finishing += summary.finishingPoints
+              stablefordTotals.hitting += summary.hittingPoints
+              stablefordTotals.drinks += summary.drinksPoints
+            })
             const totalPoints = calculateStableford666TotalPoints(scores1, holes, handicapByPlayerId) +
                                calculateStableford666TotalPoints(scores2, holes, handicapByPlayerId)
 
@@ -189,7 +212,12 @@ export default async function PairScorecardsPage({
               <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-4 border-b border-gray-100">
                   <h2 className="font-serif text-lg text-club-navy mb-2">{player1Name} & {player2Name}</h2>
-                  <span className="text-sm font-bold text-club-navy">Total Points: {totalPoints || 0}</span>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-club-text/70">
+                    <span className="text-sm font-bold text-club-navy">Total Points: {totalPoints || 0}</span>
+                    <span>Golf {stablefordTotals.finishing}</span>
+                    <span>Hitting {stablefordTotals.hitting}</span>
+                    <span>Drinks {stablefordTotals.drinks}</span>
+                  </div>
                 </div>
 
                 {holes.length > 0 ? (
@@ -197,8 +225,22 @@ export default async function PairScorecardsPage({
                     {holes.map((hole: any) => {
                       const segment = getStableford666Segment(hole.number)
                       const segmentLabel = getStableford666SegmentLabel(hole.number)
+                      const holeData = stablefordData.holes[String(hole.number)] || {}
+                      const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes)
                       const numericScore1 = numericHoleScore(scores1, hole.number)
                       const numericScore2 = numericHoleScore(scores2, hole.number)
+                      const player1Net = Number.isFinite(Number(numericScore1))
+                        ? floorNetHoleScore(
+                            Number(numericScore1),
+                            stablefordAllocations.get(player1.user_id)?.get(hole.number) || 0
+                          )
+                        : null
+                      const player2Net = Number.isFinite(Number(numericScore2))
+                        ? floorNetHoleScore(
+                            Number(numericScore2),
+                            stablefordAllocations.get(player2.user_id)?.get(hole.number) || 0
+                          )
+                        : null
                       
                       return (
                         <div key={hole.number} className="px-4 py-3">
@@ -206,6 +248,7 @@ export default async function PairScorecardsPage({
                             <div className="flex items-center gap-3">
                               <span className="font-bold text-club-navy">{hole.number}</span>
                               <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
+                              <span className="text-gray-500 text-xs uppercase">HCP {hole.hcp ?? '--'}</span>
                               <span className="text-gray-400 text-xs">{segmentLabel}</span>
                             </div>
                           </div>
@@ -219,14 +262,42 @@ export default async function PairScorecardsPage({
                               <>
                                 <div className="flex-1">
                                   <span className="text-gray-500 text-xs">{player1Name}</span>
-                                  <span className="block font-semibold text-club-navy">{renderMarkedScore(numericScore1, Number(hole.par) || 0)}</span>
+                                  <span className="block font-semibold text-club-navy">
+                                    {renderMarkedScore(numericScore1, Number(hole.par) || 0)}
+                                    <span className="text-club-navy/70"> ({renderMarkedScore(player1Net, Number(hole.par) || 0)})</span>
+                                  </span>
+                                  <span className="block text-[10px] text-gray-400">
+                                    Strokes {stablefordAllocations.get(player1.user_id)?.get(hole.number) || 0} ({strokeDots(stablefordAllocations.get(player1.user_id)?.get(hole.number) || 0)})
+                                  </span>
                                 </div>
                                 <div className="flex-1">
                                   <span className="text-gray-500 text-xs">{player2Name}</span>
-                                  <span className="block font-semibold text-club-navy">{renderMarkedScore(numericScore2, Number(hole.par) || 0)}</span>
+                                  <span className="block font-semibold text-club-navy">
+                                    {renderMarkedScore(numericScore2, Number(hole.par) || 0)}
+                                    <span className="text-club-navy/70"> ({renderMarkedScore(player2Net, Number(hole.par) || 0)})</span>
+                                  </span>
+                                  <span className="block text-[10px] text-gray-400">
+                                    Strokes {stablefordAllocations.get(player2.user_id)?.get(hole.number) || 0} ({strokeDots(stablefordAllocations.get(player2.user_id)?.get(hole.number) || 0)})
+                                  </span>
                                 </div>
                               </>
                             )}
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-club-text/70">
+                            <span>Golf {summary.finishingPoints}</span>
+                            <span>Hitting {summary.hittingPoints}</span>
+                            <span>Drinks {summary.drinksPoints}</span>
+                            <span>Total {summary.totalPoints}</span>
+                            <span>B/C/S {Number(holeData.beers) || 0}/{Number(holeData.cocktails) || 0}/{Number(holeData.shots) || 0}</span>
+                            <span>
+                              Hit:{' '}
+                              {[
+                                holeData.fairwayHit ? 'FW' : null,
+                                holeData.gir ? 'GIR' : null,
+                                holeData.onePutt ? '1P' : null,
+                                holeData.chipIn ? 'Chip-In' : null,
+                              ].filter(Boolean).join(', ') || 'None'}
+                            </span>
                           </div>
                         </div>
                       )
@@ -278,6 +349,10 @@ export default async function PairScorecardsPage({
                         <div className="flex items-center gap-3">
                           <span className="font-bold text-club-navy">{hole.number}</span>
                           <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
+                          <span className="text-gray-500 text-xs uppercase">HCP {hole.hcp ?? '--'}</span>
+                          <span className="text-gray-400 text-[10px]">
+                            Strokes {allocations.get(hole.number) || 0} ({strokeDots(allocations.get(hole.number) || 0)})
+                          </span>
                         </div>
                         <span className="font-semibold text-club-navy">
                           {renderMarkedScore(numericHoleScore(scores, hole.number), Number(hole.par) || 0)}
