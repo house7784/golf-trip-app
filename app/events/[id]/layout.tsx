@@ -42,10 +42,10 @@ export default async function EventLayout({
               GOLF TRIP
             </Link>
             <div className="flex items-center gap-3 sm:gap-6 text-[11px] sm:text-xs font-bold uppercase tracking-[0.18em]">
-              <Link href="/events" className="transition hover:text-club-gold">Home</Link>
+              <Link href="/" className="transition hover:text-club-gold">Home</Link>
               <Link href={`/events/${id}/dashboard`} className="hidden transition hover:text-club-gold lg:block">Dashboard</Link>
               <Link href={`/events/${id}/tee-times`} className="transition hover:text-club-gold">Tee Times</Link>
-              <Link href="/events" className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/5 hover:text-white" title="Events Home">
+              <Link href="/" className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/5 hover:text-white" title="Home">
                 <Home size={18} />
               </Link>
               <Link href="/profile" className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/5 hover:text-white" title="Profile">

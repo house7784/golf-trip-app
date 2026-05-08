@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, MessageSquare, ToggleLeft, ToggleRight, Vote } from 'lucide-react'
 import { createPoll, deletePoll, togglePollEnabled } from './actions'
 
-type Poll = {
+export type Poll = {
   id: string
   event_id: string
   question: string
@@ -19,7 +19,7 @@ type Poll = {
   disabled_at?: string | null
 }
 
-type PollResponse = {
+export type PollResponse = {
   id: string
   poll_id: string
   user_id: string
@@ -29,7 +29,7 @@ type PollResponse = {
   updated_at: string
 }
 
-type Participant = {
+export type Participant = {
   user_id: string
   profiles?: {
     full_name?: string | null
@@ -201,17 +201,21 @@ export default function PollsClient({ eventId, eventName, polls, responses, part
                 return responseByPollUser.has(`${poll.id}:${participant.user_id}`) ? count + 1 : count
               }, 0)
               const isSelected = selectedPoll?.id === poll.id
-              const isExpired = Boolean(poll.closes_at) && new Date(poll.closes_at as string).getTime() <= Date.now()
+              const wasAutoClosed = Boolean(
+                poll.closes_at &&
+                poll.disabled_at &&
+                new Date(poll.disabled_at).getTime() >= new Date(poll.closes_at).getTime()
+              )
               const statusLabel = !poll.is_enabled
-                ? 'Disabled'
-                : isExpired
+                ? wasAutoClosed
                   ? 'Expired'
-                  : 'Enabled'
+                  : 'Disabled'
+                : 'Enabled'
               const statusClass = !poll.is_enabled
-                ? 'bg-gray-200 text-gray-600'
-                : isExpired
+                ? wasAutoClosed
                   ? 'bg-amber-100 text-amber-700'
-                  : 'bg-emerald-100 text-emerald-700'
+                  : 'bg-gray-200 text-gray-600'
+                : 'bg-emerald-100 text-emerald-700'
 
               return (
                 <div
@@ -253,7 +257,7 @@ export default function PollsClient({ eventId, eventName, polls, responses, part
                           event.stopPropagation()
                           setPollState(poll.id, !poll.is_enabled)
                         }}
-                        disabled={isPending || isExpired}
+                        disabled={isPending || wasAutoClosed}
                         className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-bold uppercase tracking-wide text-club-navy hover:bg-gray-50"
                       >
                         <span className="inline-flex items-center gap-1">

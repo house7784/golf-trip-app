@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import PollsClient from './PollsClient'
+import type { Participant, Poll, PollResponse } from './PollsClient'
 
 export default async function PollsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -51,9 +52,9 @@ export default async function PollsPage({ params }: { params: Promise<{ id: stri
     <PollsClient
       eventId={id}
       eventName={event.name}
-      polls={(pollsData || []) as any[]}
-      responses={(responsesData || []) as any[]}
-      participants={(participantsData || []) as any[]}
+      polls={(pollsData || []) as Poll[]}
+      responses={(responsesData || []) as PollResponse[]}
+      participants={(participantsData || []) as Participant[]}
     />
   )
 }

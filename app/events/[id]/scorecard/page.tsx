@@ -4,7 +4,44 @@ import Link from 'next/link'
 import { ChevronLeft, Save } from 'lucide-react'
 import { submitBestBallScores, submitScore, submitScrambleScore } from './actions'
 import Stableford666Scorecard from './Stableford666Scorecard'
-import { allocateStrokesByHole, clampHandicap, floorNetHoleScore, type HandicapApplicationMode } from '@/lib/handicap'
+import { allocateStrokesByHole, clampHandicap, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
+
+type ProfileRow = {
+  full_name?: string | null
+  handicap_index?: number | null
+}
+
+type EventParticipantRow = {
+  user_id: string
+  team_id?: string | null
+  event_handicap?: number | null
+  profiles?: ProfileRow | null
+}
+
+type PairingRow = {
+  tee_time_id: string
+  slot_number: number
+  player_id: string
+}
+
+type ScoreRow = {
+  user_id: string
+  hole_scores?: Record<string, unknown> | null
+}
+
+type RoundCourseData = {
+  holes?: CourseHole[]
+  leaderboard_group_size?: number
+  best_ball_matchplay?: boolean
+}
+
+type RoundRow = {
+  id: string
+  mode_key?: string | null
+  course_name?: string | null
+  date?: string | null
+  course_data?: RoundCourseData | null
+}
 
 function samePair(slotA: number, slotB: number) {
   return (slotA <= 2 && slotB <= 2) || (slotA >= 3 && slotB >= 3)
@@ -28,28 +65,30 @@ export default async function ScorecardPage({
 
   // 1. Get Today's Round (We'll assume the most recent or active one for simplicity)
   // Ideally, you'd select the round, but for now, let's grab the first one that has course data
-  const { data: rounds } = await supabase
+  const { data: roundsData } = await supabase
     .from('rounds')
     .select('*')
     .eq('event_id', id)
     .not('course_data', 'is', null)
     .order('date')
 
+  const rounds = (roundsData as RoundRow[] | null) || []
+
   const activeRound = query?.roundId
-    ? rounds?.find((round: any) => round.id === query.roundId) || rounds?.[0]
-    : rounds?.[0]
+    ? rounds.find((round) => round.id === query.roundId) || rounds[0]
+    : rounds[0]
 
   if (!activeRound) {
     return (
         <div className="min-h-screen bg-club-cream p-6 flex flex-col items-center justify-center text-center">
             <p className="font-serif text-xl mb-2">No Course Data Found</p>
-            <p className="text-sm text-gray-500 mb-6">The organizer hasn't set up the course yet.</p>
+            <p className="text-sm text-gray-500 mb-6">The organizer has not set up the course yet.</p>
             <Link href={`/events/${id}/dashboard`} className="text-club-navy underline">Back to Dashboard</Link>
         </div>
     )
   }
 
-  const course = activeRound.course_data
+  const course = activeRound.course_data || {}
 
   const { data: event } = await supabase
     .from('events')
@@ -96,15 +135,17 @@ export default async function ScorecardPage({
     .select('user_id, team_id, event_handicap, profiles:user_id(full_name, handicap_index)')
     .eq('event_id', id)
 
-  const participantById = new Map<string, any>()
-  ;(participants || []).forEach((entry: any) => participantById.set(entry.user_id, entry))
+  const participantsRows = (participants as EventParticipantRow[] | null) || []
+  const participantById = new Map<string, EventParticipantRow>()
+  participantsRows.forEach((entry) => participantById.set(entry.user_id, entry))
 
   const { data: pairings } = await supabase
     .from('pairings')
     .select('tee_time_id, slot_number, player_id, tee_times!inner(round_id)')
     .eq('tee_times.round_id', activeRound.id)
 
-  const actorPair = (pairings || []).find((entry: any) => entry.player_id === user?.id)
+  const pairingRows = ((pairings || []) as PairingRow[])
+  const actorPair = pairingRows.find((entry) => entry.player_id === user?.id)
 
   // ── Grouped mode detection ───────────────────────────────────────────────
   const isScramble = activeRound.mode_key === 'scramble'
@@ -112,14 +153,14 @@ export default async function ScorecardPage({
   const isStableford666 = activeRound.mode_key === 'stableford'
   const isGroupedMode = isScramble || isBestBall || isStableford666
   const groupedModeSize: number = (() => {
-    const raw = (activeRound as any).course_data?.leaderboard_group_size
+    const raw = activeRound.course_data?.leaderboard_group_size
     if (raw === 2 || raw === 4) return raw
     if (isScramble) return 4
     if (isBestBall || isStableford666) return 2
     return 1
   })()
   const isBestBallMatchPlay =
-    isBestBall && Boolean((activeRound as any).course_data?.best_ball_matchplay) && groupedModeSize === 2
+    isBestBall && Boolean(activeRound.course_data?.best_ball_matchplay) && groupedModeSize === 2
 
   let groupedModeIds: string[] = []
   let groupedModeNames: string[] = []
@@ -134,7 +175,7 @@ export default async function ScorecardPage({
   if (user?.id) partnerEditableUserIds.add(user.id)
 
   if (actorPair) {
-    ;(pairings || []).forEach((entry: any) => {
+    pairingRows.forEach((entry) => {
       if (!entry.player_id) return
       if (entry.tee_time_id === actorPair.tee_time_id && samePair(entry.slot_number, actorPair.slot_number)) {
         editableUserIds.add(entry.player_id)
@@ -144,13 +185,13 @@ export default async function ScorecardPage({
   }
 
   if (isCaptain && captainTeam?.id) {
-    ;(participants || []).forEach((entry: any) => {
+    participantsRows.forEach((entry) => {
       if (entry.team_id === captainTeam.id) editableUserIds.add(entry.user_id)
     })
   }
 
   if (isOrganizer) {
-    ;(participants || []).forEach((entry: any) => editableUserIds.add(entry.user_id))
+    participantsRows.forEach((entry) => editableUserIds.add(entry.user_id))
   }
 
   const selectableUserIds = isTeamManageMode ? editableUserIds : partnerEditableUserIds
@@ -178,20 +219,20 @@ export default async function ScorecardPage({
 
   // Resolve grouped-mode team now that selectedPlayerId is known
   if (isGroupedMode) {
-    const anchorPairing = (pairings || []).find((p: any) => p.player_id === selectedPlayerId)
+    const anchorPairing = pairingRows.find((p) => p.player_id === selectedPlayerId)
     if (anchorPairing) {
-      const sameTeeTime = (pairings || []).filter((p: any) => p.tee_time_id === anchorPairing.tee_time_id && p.player_id)
+      const sameTeeTime = pairingRows.filter((p) => p.tee_time_id === anchorPairing.tee_time_id && p.player_id)
       const inGroup = groupedModeSize === 4
         ? sameTeeTime
-        : sameTeeTime.filter((p: any) => samePair(p.slot_number, anchorPairing.slot_number))
-      groupedModeIds = inGroup.map((p: any) => p.player_id as string)
+        : sameTeeTime.filter((p) => samePair(p.slot_number, anchorPairing.slot_number))
+      groupedModeIds = inGroup.map((p) => p.player_id)
       groupedModeNames = groupedModeIds.map(
         (pid) => participantById.get(pid)?.profiles?.full_name || 'Golfer'
       )
 
       if (isBestBallMatchPlay) {
-        const opponents = sameTeeTime.filter((p: any) => !samePair(p.slot_number, anchorPairing.slot_number))
-        opposingModeIds = opponents.map((p: any) => p.player_id as string)
+        const opponents = sameTeeTime.filter((p) => !samePair(p.slot_number, anchorPairing.slot_number))
+        opposingModeIds = opponents.map((p) => p.player_id)
         opposingModeNames = opposingModeIds.map(
           (pid) => participantById.get(pid)?.profiles?.full_name || 'Golfer'
         )
@@ -212,15 +253,15 @@ export default async function ScorecardPage({
     .eq('round_id', activeRound.id)
     .in('user_id', scoreIdsToLoad)
 
-  const scoresByPlayerId = new Map<string, Record<string, any>>()
-  ;(existingScores || []).forEach((row: any) => {
+  const scoresByPlayerId = new Map<string, Record<string, unknown>>()
+  ;((existingScores || []) as ScoreRow[]).forEach((row) => {
     scoresByPlayerId.set(row.user_id, row.hole_scores || {})
   })
 
   const scores = scoresByPlayerId.get(selectedPlayerId) || {}
-  const scoreHoles = (course.holes || []) as any[]
+  const scoreHoles = (course.holes || []) as CourseHole[]
   const strokeAllocationByPlayerId = new Map<string, Map<number, number>>()
-  ;(participants || []).forEach((entry: any) => {
+  participantsRows.forEach((entry) => {
     const handicap = clampHandicap(Number(entry.event_handicap ?? entry.profiles?.handicap_index ?? 0), handicapCap)
     strokeAllocationByPlayerId.set(
       entry.user_id,
@@ -457,7 +498,7 @@ export default async function ScorecardPage({
                 )}
                 
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                  {isBestBall ? course.holes.map((hole: any) => (
+                  {isBestBall ? (course.holes || []).map((hole: CourseHole) => (
                     <div key={hole.number} className="border-b border-gray-100 last:border-0 p-3">
                       <div className="flex items-center justify-between mb-3">
                         <div>
@@ -472,9 +513,10 @@ export default async function ScorecardPage({
                       <div className="grid grid-cols-2 gap-2">
                         {groupedModeIds.map((groupPlayerId) => {
                           const playerName = participantById.get(groupPlayerId)?.profiles?.full_name || 'Golfer'
-                          const currentVal = scoresByPlayerId.get(groupPlayerId)?.[hole.number]
+                          const rawCurrentVal = Number(scoresByPlayerId.get(groupPlayerId)?.[hole.number])
+                          const currentVal = Number.isFinite(rawCurrentVal) ? rawCurrentVal : undefined
                           let scoreColor = 'text-club-navy'
-                          if (currentVal) {
+                          if (currentVal !== undefined) {
                             if (currentVal < hole.par) scoreColor = 'text-red-500 font-bold'
                             if (currentVal > hole.par) scoreColor = 'text-blue-500'
                           }
@@ -563,11 +605,12 @@ export default async function ScorecardPage({
                         </>
                       )}
                     </div>
-                  )) : course.holes.map((hole: any) => {
-                    const currentVal = scores[hole.number]
+                  )) : (course.holes || []).map((hole: CourseHole) => {
+                    const rawCurrentVal = Number(scores[hole.number])
+                    const currentVal = Number.isFinite(rawCurrentVal) ? rawCurrentVal : undefined
                         
                     let scoreColor = 'text-club-navy'
-                    if (currentVal) {
+                    if (currentVal !== undefined) {
                       if (currentVal < hole.par) scoreColor = 'text-red-500 font-bold'
                       if (currentVal > hole.par) scoreColor = 'text-blue-500'
                     }
