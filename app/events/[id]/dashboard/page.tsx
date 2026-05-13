@@ -647,6 +647,60 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		}))
 	}
 
+	const appendMatchPlayPoints = (
+		round: RoundRow,
+		rows: Array<{
+			key: string
+			label: string
+			memberNames: string[]
+			memberIds: string[]
+			score: number | null
+		}>
+	) => {
+		const courseData = (round.course_data || {}) as Record<string, any>
+		const winnerPoints = Math.max(0, Number(courseData.match_winner_points ?? 0) || 0)
+		const tiePoints = Math.max(0, Number(courseData.match_tie_points ?? 0) || 0)
+		const placePointsByKey = new Map<string, number>()
+
+		const matchGroups = new Map<string, typeof rows>()
+		rows.forEach((row) => {
+			const teeTimeId = row.key.split('-group-')[0]
+			const existing = matchGroups.get(teeTimeId) || []
+			existing.push(row)
+			matchGroups.set(teeTimeId, existing)
+		})
+
+		matchGroups.forEach((matchRows) => {
+			if (matchRows.length < 2) {
+				matchRows.forEach((row) => placePointsByKey.set(row.key, 0))
+				return
+			}
+
+			const [rowA, rowB] = matchRows
+			if (rowA.score === null || rowB.score === null) {
+				placePointsByKey.set(rowA.key, 0)
+				placePointsByKey.set(rowB.key, 0)
+				return
+			}
+
+			if (rowA.score > rowB.score) {
+				placePointsByKey.set(rowA.key, winnerPoints)
+				placePointsByKey.set(rowB.key, 0)
+			} else if (rowB.score > rowA.score) {
+				placePointsByKey.set(rowA.key, 0)
+				placePointsByKey.set(rowB.key, winnerPoints)
+			} else {
+				placePointsByKey.set(rowA.key, tiePoints)
+				placePointsByKey.set(rowB.key, tiePoints)
+			}
+		})
+
+		return rows.map((row) => ({
+			...row,
+			placePoints: row.score === null ? null : (placePointsByKey.get(row.key) ?? 0),
+		}))
+	}
+
 	const dailyRoundLeaderboards = [] as Array<{
 		roundId: string
 		roundDate: string | null
@@ -662,7 +716,10 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 
 	for (const round of sortedRounds) {
 		const { groupSize, rows } = await buildRoundLeaderboardRows(round)
-		const rowsWithPoints = appendPlacePoints(round, rows)
+		const isMatchPlayRound = round.mode_key === 'best_ball' && Boolean(round.course_data?.best_ball_matchplay) && groupSize === 2
+		const rowsWithPoints = isMatchPlayRound
+			? appendMatchPlayPoints(round, rows)
+			: appendPlacePoints(round, rows)
 		dailyRoundLeaderboards.push({
 			roundId: round.id,
 			roundDate: round.date || null,

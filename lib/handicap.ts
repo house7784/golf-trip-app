@@ -27,36 +27,25 @@ export function allocateStrokesByHole(
 
   if (strokes === 0 || holes.length === 0) return allocation
 
-  if (mode === 'par3_one_then_next_hardest') {
-    let remaining = strokes
-    const par3 = sortedByHcp(holes.filter((hole) => hole.par === 3))
-
-    for (const hole of par3) {
-      if (remaining <= 0) break
-      allocation.set(hole.number, (allocation.get(hole.number) || 0) + 1)
-      remaining -= 1
-    }
-
-    const nonPar3 = sortedByHcp(holes.filter((hole) => hole.par !== 3))
-    let idx = 0
-    while (remaining > 0 && nonPar3.length > 0) {
-      const hole = nonPar3[idx % nonPar3.length]
-      allocation.set(hole.number, (allocation.get(hole.number) || 0) + 1)
-      remaining -= 1
-      idx += 1
-    }
-
-    return allocation
-  }
-
   const byHcp = sortedByHcp(holes)
   let remaining = strokes
-  let idx = 0
   while (remaining > 0) {
-    const hole = byHcp[idx % byHcp.length]
-    allocation.set(hole.number, (allocation.get(hole.number) || 0) + 1)
-    remaining -= 1
-    idx += 1
+    let allocatedInPass = false
+
+    for (const hole of byHcp) {
+      const current = allocation.get(hole.number) || 0
+      const exceedsPar3Limit = mode === 'par3_one_then_next_hardest' && hole.par === 3 && current >= 1
+
+      if (exceedsPar3Limit) continue
+
+      allocation.set(hole.number, current + 1)
+      remaining -= 1
+      allocatedInPass = true
+
+      if (remaining <= 0) break
+    }
+
+    if (!allocatedInPass) break
   }
 
   return allocation
