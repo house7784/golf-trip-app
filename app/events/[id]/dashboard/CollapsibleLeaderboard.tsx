@@ -4,6 +4,11 @@ import { useState } from 'react'
 import { Trophy, ChevronDown, ChevronUp } from 'lucide-react'
 import Link from 'next/link'
 
+function formatPoints(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '--'
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
 export type LeaderboardRow = {
   key: string
   label: string
@@ -139,7 +144,7 @@ export default function CollapsibleLeaderboard({
                         </div>
                       </div>
                       <p className="font-serif font-bold text-club-navy text-lg">
-                        {row.score === null ? '--' : `${row.score} (${row.placePoints ?? 0})`}
+                        {row.score === null ? '--' : `${formatPoints(row.score)} (${formatPoints(row.placePoints ?? 0)})`}
                       </p>
                     </>
                   )
@@ -237,7 +242,7 @@ export default function CollapsibleLeaderboard({
                           </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <p className="font-serif font-bold text-club-navy text-lg">{row.points}</p>
+                          <p className="font-serif font-bold text-club-navy text-lg">{formatPoints(row.points)}</p>
                           {isExpanded ? (
                             <ChevronUp size={16} className="text-club-navy/60" />
                           ) : (
@@ -268,7 +273,7 @@ export default function CollapsibleLeaderboard({
                                         : 'Round'}{' '}
                                       • {subtotal.formatLabel}
                                     </p>
-                                    <p className="font-bold text-club-navy shrink-0">{subtotal.points}</p>
+                                    <p className="font-bold text-club-navy shrink-0">{formatPoints(subtotal.points)}</p>
                                   </div>
                                 ))}
                               </div>
@@ -295,7 +300,7 @@ export default function CollapsibleLeaderboard({
                                       <p className="text-[10px] text-club-text/50 truncate">{item.note}</p>
                                     ) : null}
                                   </div>
-                                  <p className="text-xs font-bold text-club-green shrink-0">+{item.points}</p>
+                                  <p className="text-xs font-bold text-club-green shrink-0">+{formatPoints(item.points)}</p>
                                 </div>
                               ))}
                             </div>

@@ -627,19 +627,32 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		const scoredRows = rows.filter((row) => row.score !== null)
 		const placePointsByKey = new Map<string, number>()
 
-		let rank = 0
-		let previousScore: number | null = null
-		scoredRows.forEach((row, index) => {
-			if (row.score !== previousScore) {
-				rank = index + 1
-				previousScore = row.score
+		for (let startIndex = 0; startIndex < scoredRows.length;) {
+			const tieScore = scoredRows[startIndex].score
+			let endIndex = startIndex
+			while (endIndex + 1 < scoredRows.length && scoredRows[endIndex + 1].score === tieScore) {
+				endIndex += 1
 			}
 
-			const tripPts = hasConfiguredPoints
-				? (positionPoints[String(rank)] ?? 0)
-				: (scoredRows.length - rank + 1)
-			placePointsByKey.set(row.key, tripPts)
-		})
+			const occupiedPositions = Array.from(
+				{ length: endIndex - startIndex + 1 },
+				(_, offset) => startIndex + offset + 1
+			)
+			const totalPointsForSpan = occupiedPositions.reduce((sum, position) => {
+				return sum + (
+					hasConfiguredPoints
+						? (positionPoints[String(position)] ?? 0)
+						: (scoredRows.length - position + 1)
+				)
+			}, 0)
+			const averagedPoints = totalPointsForSpan / occupiedPositions.length
+
+			for (let index = startIndex; index <= endIndex; index += 1) {
+				placePointsByKey.set(scoredRows[index].key, averagedPoints)
+			}
+
+			startIndex = endIndex + 1
+		}
 
 		return rows.map((row) => ({
 			...row,
@@ -822,24 +835,42 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		const positionPoints = (courseData.position_points || {}) as Record<string, number>
 		const hasConfiguredPoints = Object.keys(positionPoints).length > 0
 
-		let rank = 0
-		let previousScore: number | null = null
-		standings.forEach((row, index) => {
-			if (row.score !== previousScore) {
-				rank = index + 1
-				previousScore = row.score
+		for (let startIndex = 0; startIndex < standings.length;) {
+			const tieScore = standings[startIndex].score
+			let endIndex = startIndex
+			while (endIndex + 1 < standings.length && standings[endIndex + 1].score === tieScore) {
+				endIndex += 1
 			}
-			const tripPts = hasConfiguredPoints
-				? (positionPoints[String(rank)] ?? 0)
-				: (teamCount - rank + 1)
-			const targetKeys = new Set(
-				row.memberIds
-					.map((memberId) => userIdToOverallEntryKey.get(memberId))
-					.filter(Boolean) as string[]
+
+			const occupiedPositions = Array.from(
+				{ length: endIndex - startIndex + 1 },
+				(_, offset) => startIndex + offset + 1
 			)
-			targetKeys.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + tripPts))
-			recordOverallContribution(targetKeys, round, formatLabel, row.label, row.memberNames, tripPts, `Finished #${rank}`)
-		})
+			const totalPointsForSpan = occupiedPositions.reduce((sum, position) => {
+				return sum + (
+					hasConfiguredPoints
+						? (positionPoints[String(position)] ?? 0)
+						: (teamCount - position + 1)
+				)
+			}, 0)
+			const averagedPoints = totalPointsForSpan / occupiedPositions.length
+			const finishLabel = occupiedPositions.length === 1
+				? `Finished #${occupiedPositions[0]}`
+				: `T-${occupiedPositions[0]} (${occupiedPositions.join('/')})`
+
+			for (let index = startIndex; index <= endIndex; index += 1) {
+				const row = standings[index]
+				const targetKeys = new Set(
+					row.memberIds
+						.map((memberId) => userIdToOverallEntryKey.get(memberId))
+						.filter(Boolean) as string[]
+				)
+				targetKeys.forEach((key) => overallPoints.set(key, (overallPoints.get(key) || 0) + averagedPoints))
+				recordOverallContribution(targetKeys, round, formatLabel, row.label, row.memberNames, averagedPoints, finishLabel)
+			}
+
+			startIndex = endIndex + 1
+		}
 	}
 
 	const overallContributionRows = Object.fromEntries(

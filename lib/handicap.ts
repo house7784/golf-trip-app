@@ -6,6 +6,19 @@ export type CourseHole = {
   hcp: number
 }
 
+export function buildDefaultCourseHoles(holeCount: number) {
+  return Array.from({ length: holeCount }).map((_, index) => ({
+    number: index + 1,
+    par: 4,
+    hcp: index + 1,
+  }))
+}
+
+export function normalizeHandicapForHoleCount(handicap: number, holeCount: number) {
+  const safeHandicap = Math.max(0, Number(handicap || 0))
+  return holeCount <= 9 ? safeHandicap / 2 : safeHandicap
+}
+
 export function clampHandicap(value: number | null | undefined, cap: number | null | undefined) {
   const base = Math.max(0, Number(value || 0))
   if (cap === null || cap === undefined || Number.isNaN(Number(cap))) return base
@@ -21,7 +34,8 @@ export function allocateStrokesByHole(
   handicap: number,
   mode: HandicapApplicationMode
 ) {
-  const strokes = Math.max(0, Math.floor(handicap))
+  const normalizedHandicap = normalizeHandicapForHoleCount(handicap, holes.length)
+  const strokes = Math.max(0, Math.floor(normalizedHandicap))
   const allocation = new Map<number, number>()
   holes.forEach((hole) => allocation.set(hole.number, 0))
 

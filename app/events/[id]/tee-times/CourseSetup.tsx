@@ -3,13 +3,32 @@
 import { useState } from 'react'
 import { Settings, RotateCcw, X } from 'lucide-react'
 import { saveCourseData } from '../scorecard/actions'
+import { buildDefaultCourseHoles } from '@/lib/handicap'
 
 export default function CourseSetup({ eventId, roundId, initialData, initialName }: any) {
   const [isOpen, setIsOpen] = useState(false)
   const [name, setName] = useState(initialName || '')
-  
-  // Default to 18 holes, Par 4
-  const [holes, setHoles] = useState(initialData?.holes || Array.from({ length: 18 }).map((_, i) => ({ number: i + 1, par: 4, hcp: i + 1 })))
+
+    const initialHoles = Array.isArray(initialData?.holes) && initialData.holes.length > 0
+        ? initialData.holes
+        : buildDefaultCourseHoles(18)
+    const [holeCount, setHoleCount] = useState(initialHoles.length <= 9 ? 9 : 18)
+    const [holes, setHoles] = useState(initialHoles)
+
+    const applyHoleCount = (nextHoleCount: 9 | 18) => {
+        setHoleCount(nextHoleCount)
+        setHoles((currentHoles: Array<{ number: number; par: number; hcp: number }>) => {
+            if (nextHoleCount === 9) {
+                return currentHoles.slice(0, 9)
+            }
+
+            const nextHoles = [...currentHoles]
+            for (let number = nextHoles.length + 1; number <= 18; number += 1) {
+                nextHoles.push({ number, par: 4, hcp: number })
+            }
+            return nextHoles.slice(0, 18)
+        })
+    }
 
   const handleSave = async () => {
     await saveCourseData(eventId, roundId, name, holes)
@@ -17,7 +36,7 @@ export default function CourseSetup({ eventId, roundId, initialData, initialName
   }
 
   const resetToPar72 = () => {
-    const standard = holes.map((h: any) => ({ ...h, par: 4 }))
+        const standard = holes.map((h: any) => ({ ...h, par: 4, hcp: h.number }))
     setHoles(standard)
   }
 
@@ -60,10 +79,35 @@ export default function CourseSetup({ eventId, roundId, initialData, initialName
                 />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div className="mb-8">
+                <label className="block text-xs font-bold uppercase text-gray-400 mb-2">Round Length</label>
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                    <button
+                        type="button"
+                        onClick={() => applyHoleCount(9)}
+                        className={`px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
+                            holeCount === 9 ? 'bg-club-navy text-white' : 'text-club-navy/70 hover:bg-white'
+                        }`}
+                    >
+                        9 Holes
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => applyHoleCount(18)}
+                        className={`px-4 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
+                            holeCount === 18 ? 'bg-club-navy text-white' : 'text-club-navy/70 hover:bg-white'
+                        }`}
+                    >
+                        18 Holes
+                    </button>
+                </div>
+                <p className="mt-2 text-[11px] text-gray-400">If handicap scoring is enabled, 9-hole rounds use half handicap before stroke allocation.</p>
+            </div>
+
+            <div className={`grid grid-cols-1 ${holeCount === 18 ? 'lg:grid-cols-2' : ''} gap-12`}>
                 {/* Front 9 */}
                 <div>
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-club-navy border-b-2 border-club-navy pb-2 mb-4">Front 9</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-club-navy border-b-2 border-club-navy pb-2 mb-4">{holeCount === 9 ? 'Holes' : 'Front 9'}</h3>
                     <div className="space-y-3">
                         {holes.slice(0, 9).map((hole: any, i: number) => (
                             <HoleRow key={hole.number} hole={hole} index={i} holes={holes} setHoles={setHoles} />
@@ -71,14 +115,14 @@ export default function CourseSetup({ eventId, roundId, initialData, initialName
                     </div>
                 </div>
                 {/* Back 9 */}
-                <div>
+                {holeCount === 18 ? <div>
                     <h3 className="text-sm font-bold uppercase tracking-widest text-club-navy border-b-2 border-club-navy pb-2 mb-4">Back 9</h3>
                     <div className="space-y-3">
                         {holes.slice(9, 18).map((hole: any, i: number) => (
                             <HoleRow key={hole.number} hole={hole} index={i + 9} holes={holes} setHoles={setHoles} />
                         ))}
                     </div>
-                </div>
+                </div> : null}
             </div>
         </div>
 

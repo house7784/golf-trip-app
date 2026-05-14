@@ -648,11 +648,13 @@ export default async function ScorecardPage({
                   })}
                 </div>
 
-                <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto">
-                  <button disabled={!canEditSelected} className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <div className="fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-club-cream via-club-cream/95 to-transparent px-6 pb-6 pt-10">
+                  <div className="max-w-md mx-auto rounded-2xl border border-club-navy/10 bg-white/92 p-3 shadow-lg backdrop-blur-sm">
+                    <button disabled={!canEditSelected} className="w-full bg-club-navy text-Black py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <Save size={18} />
                         Save Card
-                    </button>
+                  </button>
+                  </div>
                 </div>
 
             </form>
