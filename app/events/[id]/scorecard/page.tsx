@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { ChevronLeft, Save } from 'lucide-react'
 import { submitBestBallScores, submitScore, submitScrambleScore } from './actions'
+import SaveCardButton from './SaveCardButton'
 import Stableford666Scorecard from './Stableford666Scorecard'
 import { allocateStrokesByHole, clampHandicap, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 
@@ -73,10 +74,19 @@ export default async function ScorecardPage({
     .order('date')
 
   const rounds = (roundsData as RoundRow[] | null) || []
+  const { data: event } = await supabase
+    .from('events')
+    .select('created_by, handicap_cap, handicap_application, focused_round_id')
+    .eq('id', id)
+    .single()
+  const today = new Date().toISOString().split('T')[0]
 
   const activeRound = query?.roundId
     ? rounds.find((round) => round.id === query.roundId) || rounds[0]
-    : rounds[0]
+    : rounds.find((round) => round.id === event?.focused_round_id)
+      || rounds.find((round) => round.date === today)
+      || [...rounds].reverse().find((round) => (round.date || '') <= today)
+      || rounds[0]
 
   if (!activeRound) {
     return (
@@ -89,12 +99,6 @@ export default async function ScorecardPage({
   }
 
   const course = activeRound.course_data || {}
-
-  const { data: event } = await supabase
-    .from('events')
-    .select('created_by, handicap_cap, handicap_application')
-    .eq('id', id)
-    .single()
 
   const handicapCap = event?.handicap_cap ?? null
 
@@ -194,7 +198,11 @@ export default async function ScorecardPage({
     participantsRows.forEach((entry) => editableUserIds.add(entry.user_id))
   }
 
-  const selectableUserIds = isTeamManageMode ? editableUserIds : partnerEditableUserIds
+  const selectableUserIds = isTeamManageMode
+    ? editableUserIds
+    : isGroupedMode
+      ? partnerEditableUserIds
+      : new Set(user?.id ? [user.id] : [])
 
   const editablePlayers = Array.from(selectableUserIds)
     .map((playerId) => ({
@@ -650,10 +658,7 @@ export default async function ScorecardPage({
 
                 <div className="fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-club-cream via-club-cream/95 to-transparent px-6 pb-6 pt-10">
                   <div className="max-w-md mx-auto rounded-2xl border border-club-navy/10 bg-white/92 p-3 shadow-lg backdrop-blur-sm">
-                    <button disabled={!canEditSelected} className="w-full bg-club-navy text-Black py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <Save size={18} />
-                        Save Card
-                  </button>
+                    <SaveCardButton disabled={!canEditSelected} />
                   </div>
                 </div>
 

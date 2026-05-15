@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Minus, Plus, Save } from 'lucide-react'
+import { Check, Minus, Plus, Save } from 'lucide-react'
 import type { CourseHole, HandicapApplicationMode } from '@/lib/handicap'
 import {
   buildStableford666Payload,
@@ -52,6 +52,7 @@ export default function Stableford666Scorecard({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
   const [data, setData] = useState<Stableford666Data>(() => getStableford666Data(initialPayload))
 
   const handicapByPlayerId = useMemo(
@@ -70,6 +71,7 @@ export default function Stableford666Scorecard({
   )
 
   const updateHole = (holeNumber: number, patch: Record<string, any>) => {
+    setSaved(false)
     setData((current) => ({
       holes: {
         ...current.holes,
@@ -82,6 +84,7 @@ export default function Stableford666Scorecard({
   }
 
   const updatePlayerScore = (holeNumber: number, playerId: string, value: string) => {
+    setSaved(false)
     setData((current) => {
       const holeData = current.holes[String(holeNumber)] || {}
       const playerScores = { ...(holeData.playerScores || {}) }
@@ -107,6 +110,7 @@ export default function Stableford666Scorecard({
   const handleSave = () => {
     if (!canEdit || pending) return
     setError(null)
+    setSaved(false)
 
     startTransition(async () => {
       try {
@@ -118,6 +122,7 @@ export default function Stableford666Scorecard({
           players.map((player) => player.id),
           payload
         )
+        setSaved(true)
         router.refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to save scorecard')
@@ -316,15 +321,25 @@ export default function Stableford666Scorecard({
       )}
 
       <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!canEdit || pending}
-          className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Save size={18} />
-          {pending ? 'Saving...' : 'Save Card'}
-        </button>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!canEdit || pending}
+            className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Save size={18} />
+            {pending ? 'Saving...' : 'Save Card'}
+          </button>
+          <div className="flex justify-center min-h-5">
+            {saved ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 border border-emerald-200">
+                <Check size={12} />
+                Saved Scores
+              </span>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   )
