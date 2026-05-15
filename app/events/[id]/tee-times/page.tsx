@@ -45,33 +45,26 @@ export default async function TeeTimesPage({
 
   if (!user) redirect('/login')
 
-  // 1. Fetch Event and Rounds separately so the focused-round foreign key
-  // does not make the events -> rounds relationship ambiguous.
-  const { data: eventData } = await supabase
+  // 1. Fetch Event with ALL Rounds
+  const { data: event } = await supabase
     .from('events')
-    .select('id, name, created_by, focused_round_id')
-    .eq('id', id)
-    .maybeSingle()
-
-  if (!eventData) return <div>Event not found</div>
-
-  const event = eventData as any
-
-  const { data: roundsData } = await supabase
-    .from('rounds')
     .select(`
       *, 
-      tee_times (
+      rounds (
         *, 
-        pairings (
+        tee_times (
           *, 
-          profiles (*)
+          pairings (
+            *, 
+            profiles (*)
+          )
         )
       )
     `)
-    .eq('event_id', id)
+    .eq('id', id)
+    .single()
 
-  event.rounds = roundsData || []
+  if (!event) return <div>Event not found</div>
 
   const isOrganizer = event.created_by === user.id
 
