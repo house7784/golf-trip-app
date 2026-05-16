@@ -87,6 +87,13 @@ export default async function ScorecardPage({
       || [...rounds].reverse().find((round) => (round.date || '') <= today)
       || rounds[0]
   const justSaved = query?.saved === '1'
+  const buildRoundHref = (roundId: string) => {
+    const params = new URLSearchParams()
+    params.set('roundId', roundId)
+    if (query?.playerId) params.set('playerId', query.playerId)
+    if (query?.scope) params.set('scope', query.scope)
+    return `/events/${id}/scorecard?${params.toString()}`
+  }
 
   if (!activeRound) {
     return (
@@ -344,12 +351,6 @@ export default async function ScorecardPage({
         </div>
       </div>
 
-      {event?.created_by === user?.id && rounds.length > 1 && (
-        <div className="max-w-md mx-auto mb-4">
-          <div className="bg-white rounded-lg border border-club-gold/20 p-3 shadow-sm">
-            <p className="text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">Focus Round</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-
       {justSaved && (
         <div className="max-w-md mx-auto mb-4">
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 flex items-center gap-2">
@@ -358,12 +359,18 @@ export default async function ScorecardPage({
           </div>
         </div>
       )}
+
+      {rounds.length > 1 && (
+        <div className="max-w-md mx-auto mb-4">
+          <div className="bg-white rounded-lg border border-club-gold/20 p-3 shadow-sm">
+            <p className="text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">Trip Rounds</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {rounds.map((round) => {
                 const isActive = round.id === activeRound.id
                 return (
                   <Link
                     key={round.id}
-                    href={`/events/${id}/scorecard?roundId=${round.id}`}
+                    href={buildRoundHref(round.id)}
                     className={`flex-shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider border transition-colors ${
                       isActive
                         ? 'bg-club-navy text-white border-club-navy'
@@ -544,6 +551,32 @@ export default async function ScorecardPage({
                       <input key={gid} type="hidden" name="groupPlayerId" value={gid} />
                     ))}
                   </>
+                )}
+
+                {rounds.length > 1 && (
+                  <div className="max-w-md mx-auto mb-4">
+                    <div className="bg-white rounded-lg border border-club-gold/20 p-3 shadow-sm">
+                      <p className="text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">Trip Rounds</p>
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {rounds.map((round) => {
+                          const isActive = round.id === activeRound.id
+                          return (
+                            <Link
+                              key={round.id}
+                              href={buildRoundHref(round.id)}
+                              className={`flex-shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider border transition-colors ${
+                                isActive
+                                  ? 'bg-club-navy text-white border-club-navy'
+                                  : 'bg-club-paper text-club-navy border-club-gold/20 hover:border-club-gold'
+                              }`}
+                            >
+                              {round.date || 'Round'}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 )}
                 
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
