@@ -22,7 +22,7 @@ import CollapsibleLeaderboard from './CollapsibleLeaderboard'
 import { activateLeaderboard, deactivateLeaderboard, postAnnouncement } from './actions'
 import { allocateStrokesByHole, calculateNetTotal, clampHandicap, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 import { getDefaultLeaderboardGroupSize, normalizeLeaderboardGroupSize } from '@/lib/game_modes'
-import { calculateStableford666TotalPoints, getStableford666Name } from '@/lib/stableford_666'
+import { calculateStableford666HoleSummary, calculateStableford666TotalPoints, getStableford666Name, getStableford666Data } from '@/lib/stableford_666'
 
 const LEADERBOARD_ACTIVATION_MESSAGE = '__SYSTEM__:LEADERBOARD_ACTIVE'
 
@@ -488,12 +488,22 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 				const handicapByPlayerId = Object.fromEntries(
 					entry.memberIds.map((memberId) => [memberId, effectiveHandicapByUserId.get(memberId) || 0])
 				)
+
+				const stablefordData = payload ? getStableford666Data(payload) : null
+				const hasScoredHole = Boolean(stablefordData) && holes.some((hole) => {
+					const holeData = stablefordData?.holes[String(hole.number)] || {}
+					const summary = calculateStableford666HoleSummary(hole, holeData, handicapByPlayerId, holes, handicapApplication)
+					return summary.scoringValue !== null || summary.hittingPoints > 0 || summary.drinksPoints > 0
+				})
+
 				return {
 					key: entry.key,
 					label: entry.label,
 					memberNames: entry.memberNames,
 					memberIds: entry.memberIds,
-					score: payload ? calculateStableford666TotalPoints(payload, holes, handicapByPlayerId, handicapApplication) : null,
+					score: hasScoredHole && payload
+						? calculateStableford666TotalPoints(payload, holes, handicapByPlayerId, handicapApplication)
+						: null,
 				}
 			})
 			.sort((a, b) => {

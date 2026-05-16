@@ -18,6 +18,12 @@ export type Stableford666Data = {
 
 export const STABLEFORD_666_STORAGE_KEY = '_stableford666'
 
+function toNumericScore(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
 function isRecord(value: unknown): value is Record<string, any> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -103,16 +109,16 @@ export function calculateStableford666HoleSummary(
   if (segment === 'best_ball') {
     const playerScores = holeData.playerScores || {}
     Object.entries(playerScores).forEach(([playerId, score]) => {
-      const gross = Number(score)
-      if (!Number.isFinite(gross)) return
+      const gross = toNumericScore(score)
+      if (gross === null) return
       const allocation = allocations.get(playerId)
       const net = floorNetHoleScore(gross, allocation?.get(hole.number) || 0)
       if (scoringValue === null || net < scoringValue) scoringValue = net
       if (gross === 1) holeInOne = true
     })
   } else {
-    const teamScore = Number(holeData.teamScore)
-    if (Number.isFinite(teamScore)) {
+    const teamScore = toNumericScore(holeData.teamScore)
+    if (teamScore !== null) {
       scoringValue = teamScore
       holeInOne = teamScore === 1
     }

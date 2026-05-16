@@ -227,7 +227,17 @@ export default function Stableford666Scorecard({
               )}
 
               <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-club-text/60">Hitting Points</p>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-club-text/60">Hitting Points</p>
+                  <button
+                    type="button"
+                    onClick={() => updateHole(hole.number, { fairwayHit: false, gir: false, onePutt: false, chipIn: false })}
+                    disabled={!canEdit || pending || summary.hittingPoints === 0}
+                    className="rounded-md border border-gray-300 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#1f1845] disabled:opacity-40"
+                  >
+                    Clear Hitting
+                  </button>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     ['fairwayHit', 'Fairway Hit +1'],
@@ -244,8 +254,8 @@ export default function Stableford666Scorecard({
                         disabled={!canEdit || pending}
                         className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
                           active
-                            ? 'border-club-navy bg-club-navy text-white'
-                            : 'border-gray-200 bg-gray-50 text-club-navy'
+                            ? 'border-[#1f1845] bg-[#1f1845] text-white shadow-sm'
+                            : 'border-gray-300 bg-gray-50 text-[#1f1845]'
                         }`}
                       >
                         {label}
@@ -326,7 +336,7 @@ export default function Stableford666Scorecard({
             type="button"
             onClick={handleSave}
             disabled={!canEdit || pending}
-            className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-[#1f1845] text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-[#c3b58d] hover:text-[#1f1845] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Save size={18} />
             {pending ? 'Saving...' : 'Save Card'}
