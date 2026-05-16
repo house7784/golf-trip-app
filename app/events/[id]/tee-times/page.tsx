@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { Clock, Trash2, Plus, Lock, Unlock, Edit, Calendar, MapPin, User, ArrowLeft } from 'lucide-react'
 import CourseSetup from './CourseSetup'
 import SlotAssignment from './SlotAssignment'
-import { createTeeTime, deleteTeeTime, setFocusedRound, toggleRoundLock } from './actions'
+import { createTeeTime, deleteTeeTime, toggleRoundLock } from './actions'
 import { GAME_MODES, type GameModeKey } from '@/lib/game_modes'
 
 // Helper to format dates nicely (e.g., "Fri, May 16")
@@ -49,7 +49,7 @@ export default async function TeeTimesPage({
   // does not make the events -> rounds relationship ambiguous.
   const { data: eventData } = await supabase
     .from('events')
-    .select('id, name, created_by, focused_round_id')
+    .select('id, name, created_by')
     .eq('id', id)
     .maybeSingle()
 
@@ -82,8 +82,7 @@ export default async function TeeTimesPage({
   const today = new Date().toISOString().split('T')[0]
   const activeRound = selectedRoundId 
     ? rounds.find((r: any) => r.id === selectedRoundId)
-    : rounds.find((r: any) => r.id === event.focused_round_id)
-      || rounds.find((r: any) => r.date === today)
+    : rounds.find((r: any) => r.date === today)
       || [...rounds].reverse().find((r: any) => r.date <= today)
       || rounds[0]
 
@@ -206,20 +205,12 @@ export default async function TeeTimesPage({
             <div className="flex gap-3 items-center">
                 {isOrganizer && (
                     <>
-                  {event.focused_round_id !== activeRound.id ? (
-                    <form action={async () => {
-                      'use server'
-                      await setFocusedRound(id, activeRound.id)
-                    }}>
-                      <button className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all bg-club-navy text-white hover:bg-club-gold hover:text-club-navy">
-                        Focus This Round
-                      </button>
-                    </form>
-                  ) : (
-                    <span className="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider bg-club-gold/15 text-club-navy border border-club-gold/30">
-                      Focused Round
-                    </span>
-                  )}
+                        <Link
+                          href={`/events/${id}/scorecard?roundId=${activeRound.id}`}
+                          className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all bg-club-navy text-white hover:bg-club-gold hover:text-club-navy"
+                        >
+                          Focus This Round
+                        </Link>
                         <CourseSetup 
                             key={activeRound.id}
                             eventId={id} 

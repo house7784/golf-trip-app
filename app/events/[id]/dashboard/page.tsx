@@ -153,7 +153,6 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 	const sortedRounds = [...rounds].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
 	const today = new Date().toISOString().split('T')[0]
 	const currentRound =
-		sortedRounds.find((round) => round.id === event?.focused_round_id) ||
 		sortedRounds.find((round) => round.date === today) ||
 		[...sortedRounds].reverse().find((round) => round.date <= today) ||
 		sortedRounds[0] ||

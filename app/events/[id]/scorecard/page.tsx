@@ -1,9 +1,9 @@
 // app/events/[id]/scorecard/page.tsx
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { ChevronLeft, Save } from 'lucide-react'
 import { submitBestBallScores, submitScore, submitScrambleScore } from './actions'
-import SaveCardButton from './SaveCardButton'
 import Stableford666Scorecard from './Stableford666Scorecard'
 import { allocateStrokesByHole, clampHandicap, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 
@@ -57,7 +57,7 @@ export default async function ScorecardPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams?: Promise<{ roundId?: string; playerId?: string; scope?: string }>
+  searchParams?: Promise<{ roundId?: string; playerId?: string; scope?: string; saved?: string }>
 }) {
   const supabase = await createClient()
   const { id } = await params
@@ -76,17 +76,17 @@ export default async function ScorecardPage({
   const rounds = (roundsData as RoundRow[] | null) || []
   const { data: event } = await supabase
     .from('events')
-    .select('created_by, handicap_cap, handicap_application, focused_round_id')
+    .select('created_by, handicap_cap, handicap_application')
     .eq('id', id)
     .single()
   const today = new Date().toISOString().split('T')[0]
 
   const activeRound = query?.roundId
     ? rounds.find((round) => round.id === query.roundId) || rounds[0]
-    : rounds.find((round) => round.id === event?.focused_round_id)
-      || rounds.find((round) => round.date === today)
+    : rounds.find((round) => round.date === today)
       || [...rounds].reverse().find((round) => (round.date || '') <= today)
       || rounds[0]
+  const justSaved = query?.saved === '1'
 
   if (!activeRound) {
     return (
@@ -344,6 +344,41 @@ export default async function ScorecardPage({
         </div>
       </div>
 
+      {event?.created_by === user?.id && rounds.length > 1 && (
+        <div className="max-w-md mx-auto mb-4">
+          <div className="bg-white rounded-lg border border-club-gold/20 p-3 shadow-sm">
+            <p className="text-xs uppercase tracking-wider font-bold text-club-text/60 mb-2">Focus Round</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+
+      {justSaved && (
+        <div className="max-w-md mx-auto mb-4">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 flex items-center gap-2">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white">✓</span>
+            Saved Scores
+          </div>
+        </div>
+      )}
+              {rounds.map((round) => {
+                const isActive = round.id === activeRound.id
+                return (
+                  <Link
+                    key={round.id}
+                    href={`/events/${id}/scorecard?roundId=${round.id}`}
+                    className={`flex-shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider border transition-colors ${
+                      isActive
+                        ? 'bg-club-navy text-white border-club-navy'
+                        : 'bg-club-paper text-club-navy border-club-gold/20 hover:border-club-gold'
+                    }`}
+                  >
+                    {round.date || 'Round'}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isTeamManageMode && editablePlayers.length > 0 && (!isGroupedMode || isOrganizer) && (
         <div className="max-w-md mx-auto mb-4">
           <div className="bg-white rounded-lg border border-gray-200 p-3">
@@ -486,6 +521,12 @@ export default async function ScorecardPage({
                 } else {
                   await submitScore(id, activeRound.id, formData.get('playerId') as string, newScores)
                 }
+                const savedParams = new URLSearchParams()
+                savedParams.set('roundId', activeRound.id)
+                savedParams.set('saved', '1')
+                if (selectedPlayerId) savedParams.set('playerId', selectedPlayerId)
+                if (query?.scope) savedParams.set('scope', query.scope)
+                redirect(`/events/${id}/scorecard?${savedParams.toString()}`)
             }}>
                 <input type="hidden" name="playerId" value={selectedPlayerId} />
                 {isScramble && (
@@ -658,7 +699,10 @@ export default async function ScorecardPage({
 
                 <div className="fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-club-cream via-club-cream/95 to-transparent px-6 pb-6 pt-10">
                   <div className="max-w-md mx-auto rounded-2xl border border-club-navy/10 bg-white/92 p-3 shadow-lg backdrop-blur-sm">
-                    <SaveCardButton disabled={!canEditSelected} />
+                    <button disabled={!canEditSelected} className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                      <Save size={18} />
+                      Save Card
+                    </button>
                   </div>
                 </div>
 

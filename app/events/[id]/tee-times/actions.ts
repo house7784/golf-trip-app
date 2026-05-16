@@ -1,6 +1,5 @@
 'use server'
 
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 
@@ -184,49 +183,4 @@ export async function toggleRoundLock(roundId: string, isLocked: boolean) {
       .eq('id', roundId)
     
     revalidatePath('/events')
-}
-
-export async function setFocusedRound(eventId: string, roundId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !eventId || !roundId) return
-
-  const { data: participant } = await supabase
-    .from('event_participants')
-    .select('role')
-    .eq('event_id', eventId)
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  const { data: event } = await supabase
-    .from('events')
-    .select('created_by')
-    .eq('id', eventId)
-    .maybeSingle()
-
-  const isOrganizer = participant?.role === 'organizer' || event?.created_by === user.id
-  if (!isOrganizer) return
-
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('Missing Supabase service-role configuration.')
-  }
-
-  const adminSupabase = createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  )
-
-  const { error } = await adminSupabase
-    .from('events')
-    .update({ focused_round_id: roundId })
-    .eq('id', eventId)
-
-  if (error) {
-    console.error('Set focused round failed:', error)
-    throw new Error('Failed to set focused round')
-  }
-
-  revalidatePath(`/events/${eventId}/dashboard`)
-  revalidatePath(`/events/${eventId}/tee-times`)
-  revalidatePath(`/events/${eventId}/scorecard`)
 }
