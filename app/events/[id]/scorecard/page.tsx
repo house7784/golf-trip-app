@@ -57,7 +57,7 @@ export default async function ScorecardPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams?: Promise<{ roundId?: string; playerId?: string; scope?: string; saved?: string }>
+  searchParams?: Promise<{ roundId?: string; playerId?: string; scope?: string; saved?: string; error?: string }>
 }) {
   const supabase = await createClient()
   const { id } = await params
@@ -87,6 +87,7 @@ export default async function ScorecardPage({
       || [...rounds].reverse().find((round) => (round.date || '') <= today)
       || rounds[0]
   const justSaved = query?.saved === '1'
+  const saveError = typeof query?.error === 'string' ? query.error : null
   const buildRoundHref = (roundId: string) => {
     const params = new URLSearchParams()
     params.set('roundId', roundId)
@@ -360,6 +361,14 @@ export default async function ScorecardPage({
         </div>
       )}
 
+      {saveError && (
+        <div className="max-w-md mx-auto mb-4">
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+            {saveError}
+          </div>
+        </div>
+      )}
+
       {rounds.length > 1 && (
         <div className="max-w-md mx-auto mb-4">
           <div className="bg-white rounded-lg border border-club-gold/20 p-3 shadow-sm">
@@ -503,37 +512,47 @@ export default async function ScorecardPage({
 
             <form key={`${activeRound.id}:${selectedPlayerId}`} action={async (formData) => {
                 'use server'
-                const newScores: Record<string, number> = {}
-                for (let i = 1; i <= 18; i++) {
-                    const val = formData.get(`hole_${i}`)
-                    if (val) newScores[i] = parseInt(val as string)
-                }
-                if (formData.get('scramble') === '1') {
-                  const groupIds = formData.getAll('groupPlayerId') as string[]
-                  const anchor = formData.get('playerId') as string
-                  await submitScrambleScore(id, activeRound.id, anchor, groupIds, newScores)
-                } else if (formData.get('bestBall') === '1') {
-                  const groupIds = formData.getAll('groupPlayerId') as string[]
-                  const anchor = formData.get('playerId') as string
-                  const playerScores: Record<string, Record<string, number>> = {}
-                  groupIds.forEach((groupId) => {
-                  const groupHoleScores: Record<string, number> = {}
+                try {
+                  const newScores: Record<string, number> = {}
                   for (let i = 1; i <= 18; i++) {
-                    const val = formData.get(`player_${groupId}_hole_${i}`)
-                    if (val) groupHoleScores[i] = parseInt(val as string)
+                      const val = formData.get(`hole_${i}`)
+                      if (val) newScores[i] = parseInt(val as string)
                   }
-                  playerScores[groupId] = groupHoleScores
-                  })
-                  await submitBestBallScores(id, activeRound.id, anchor, playerScores)
-                } else {
-                  await submitScore(id, activeRound.id, formData.get('playerId') as string, newScores)
+                  if (formData.get('scramble') === '1') {
+                    const groupIds = formData.getAll('groupPlayerId') as string[]
+                    const anchor = formData.get('playerId') as string
+                    await submitScrambleScore(id, activeRound.id, anchor, groupIds, newScores)
+                  } else if (formData.get('bestBall') === '1') {
+                    const groupIds = formData.getAll('groupPlayerId') as string[]
+                    const anchor = formData.get('playerId') as string
+                    const playerScores: Record<string, Record<string, number>> = {}
+                    groupIds.forEach((groupId) => {
+                    const groupHoleScores: Record<string, number> = {}
+                    for (let i = 1; i <= 18; i++) {
+                      const val = formData.get(`player_${groupId}_hole_${i}`)
+                      if (val) groupHoleScores[i] = parseInt(val as string)
+                    }
+                    playerScores[groupId] = groupHoleScores
+                    })
+                    await submitBestBallScores(id, activeRound.id, anchor, playerScores)
+                  } else {
+                    await submitScore(id, activeRound.id, formData.get('playerId') as string, newScores)
+                  }
+                  const savedParams = new URLSearchParams()
+                  savedParams.set('roundId', activeRound.id)
+                  savedParams.set('saved', '1')
+                  if (selectedPlayerId) savedParams.set('playerId', selectedPlayerId)
+                  if (query?.scope) savedParams.set('scope', query.scope)
+                  redirect(`/events/${id}/scorecard?${savedParams.toString()}`)
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : 'Failed to save scores.'
+                  const errorParams = new URLSearchParams()
+                  errorParams.set('roundId', activeRound.id)
+                  errorParams.set('error', message)
+                  if (selectedPlayerId) errorParams.set('playerId', selectedPlayerId)
+                  if (query?.scope) errorParams.set('scope', query.scope)
+                  redirect(`/events/${id}/scorecard?${errorParams.toString()}`)
                 }
-                const savedParams = new URLSearchParams()
-                savedParams.set('roundId', activeRound.id)
-                savedParams.set('saved', '1')
-                if (selectedPlayerId) savedParams.set('playerId', selectedPlayerId)
-                if (query?.scope) savedParams.set('scope', query.scope)
-                redirect(`/events/${id}/scorecard?${savedParams.toString()}`)
             }}>
                 <input type="hidden" name="playerId" value={selectedPlayerId} />
                 {isScramble && (
