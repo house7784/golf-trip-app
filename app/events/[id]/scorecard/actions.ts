@@ -81,7 +81,7 @@ async function canEditScore(
 
 function getAdminSupabase() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('Missing Supabase service-role configuration')
+    return null
   }
 
   return createAdminClient(
@@ -123,15 +123,16 @@ export async function saveCourseData(eventId: string, roundId: string, courseNam
 export async function submitScore(eventId: string, roundId: string, userId: string, holeScores: any) {
   const supabase = await createClient()
   const adminSupabase = getAdminSupabase()
+  const writeSupabase = adminSupabase ?? supabase
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
-  const allowed = await canEditScore(adminSupabase, eventId, roundId, user.id, userId)
+  const allowed = await canEditScore(writeSupabase, eventId, roundId, user.id, userId)
   if (!allowed) throw new Error('Not allowed to edit this scorecard')
 
   // Upsert (Insert or Update if exists)
-  const { error } = await adminSupabase
+  const { error } = await writeSupabase
     .from('scores')
     .upsert({ 
       round_id: roundId, 
@@ -155,11 +156,12 @@ export async function submitScrambleScore(
 ) {
   const supabase = await createClient()
   const adminSupabase = getAdminSupabase()
+  const writeSupabase = adminSupabase ?? supabase
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
   // Verify the caller can edit the anchor player's scorecard (covers own group + organizer)
-  const allowed = await canEditScore(adminSupabase, eventId, roundId, user.id, anchorPlayerId)
+  const allowed = await canEditScore(writeSupabase, eventId, roundId, user.id, anchorPlayerId)
   if (!allowed) throw new Error('Not allowed to edit this scorecard')
 
   const upserts = groupPlayerIds.map((playerId) => ({
@@ -168,7 +170,7 @@ export async function submitScrambleScore(
     hole_scores: holeScores,
   }))
 
-  const { error } = await adminSupabase
+  const { error } = await writeSupabase
     .from('scores')
     .upsert(upserts, { onConflict: 'round_id, user_id' })
 
@@ -187,10 +189,11 @@ export async function submitStableford666Score(
 ) {
   const supabase = await createClient()
   const adminSupabase = getAdminSupabase()
+  const writeSupabase = adminSupabase ?? supabase
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
-  const allowed = await canEditScore(adminSupabase, eventId, roundId, user.id, anchorPlayerId)
+  const allowed = await canEditScore(writeSupabase, eventId, roundId, user.id, anchorPlayerId)
   if (!allowed) throw new Error('Not allowed to edit this scorecard')
 
   const upserts = groupPlayerIds.map((playerId) => ({
@@ -199,7 +202,7 @@ export async function submitStableford666Score(
     hole_scores: holeScores,
   }))
 
-  const { error } = await adminSupabase
+  const { error } = await writeSupabase
     .from('scores')
     .upsert(upserts, { onConflict: 'round_id, user_id' })
 
@@ -217,10 +220,11 @@ export async function submitBestBallScores(
 ) {
   const supabase = await createClient()
   const adminSupabase = getAdminSupabase()
+  const writeSupabase = adminSupabase ?? supabase
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
-  const allowed = await canEditScore(adminSupabase, eventId, roundId, user.id, anchorPlayerId)
+  const allowed = await canEditScore(writeSupabase, eventId, roundId, user.id, anchorPlayerId)
   if (!allowed) throw new Error('Not allowed to edit this scorecard')
 
   const upserts = Object.entries(playerScores).map(([playerId, holeScores]) => ({
@@ -229,7 +233,7 @@ export async function submitBestBallScores(
     hole_scores: holeScores,
   }))
 
-  const { error } = await adminSupabase
+  const { error } = await writeSupabase
     .from('scores')
     .upsert(upserts, { onConflict: 'round_id, user_id' })
 
