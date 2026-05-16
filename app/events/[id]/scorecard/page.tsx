@@ -2,8 +2,9 @@
 import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ChevronLeft, Save } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { submitBestBallScores, submitScore, submitScrambleScore } from './actions'
+import SaveCardButton from './SaveCardButton'
 import Stableford666Scorecard from './Stableford666Scorecard'
 import { allocateStrokesByHole, clampHandicap, floorNetHoleScore, type CourseHole, type HandicapApplicationMode } from '@/lib/handicap'
 
@@ -751,10 +752,7 @@ export default async function ScorecardPage({
 
                 <div className="fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-club-cream via-club-cream/95 to-transparent px-6 pb-6 pt-10">
                   <div className="max-w-md mx-auto rounded-2xl border border-club-navy/10 bg-white/92 p-3 shadow-lg backdrop-blur-sm">
-                    <button disabled={!canEditSelected} className="w-full bg-club-navy text-white py-4 rounded-lg shadow-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-club-gold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                      <Save size={18} />
-                      Save Card
-                    </button>
+                    <SaveCardButton disabled={!canEditSelected} />
                   </div>
                 </div>
 
