@@ -591,7 +591,7 @@ export default async function ScorecardPage({
                               href={buildRoundHref(round.id)}
                               className={`flex-shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider border transition-colors ${
                                 isActive
-                                  ? 'bg-club-navy text-white border-club-navy'
+                                  ? 'bg-club-navy text-Black border-club-navy'
                                   : 'bg-club-paper text-club-navy border-club-gold/20 hover:border-club-gold'
                               }`}
                             >
