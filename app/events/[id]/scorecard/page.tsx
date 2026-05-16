@@ -546,6 +546,8 @@ export default async function ScorecardPage({
                   if (query?.scope) savedParams.set('scope', query.scope)
                   redirect(`/events/${id}/scorecard?${savedParams.toString()}`)
                 } catch (error) {
+                  // Next.js redirect() throws a special error — let it propagate normally
+                  if (error instanceof Error && error.message === 'NEXT_REDIRECT') throw error
                   const message = error instanceof Error ? error.message : 'Failed to save scores.'
                   const errorParams = new URLSearchParams()
                   errorParams.set('roundId', activeRound.id)
