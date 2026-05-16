@@ -320,8 +320,8 @@ export default function Stableford666Scorecard({
         </div>
       )}
 
-      <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto">
-        <div className="space-y-2">
+      <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto z-20">
+        <div className="space-y-2 rounded-xl border border-club-gold/20 bg-white/95 p-2 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85">
           <button
             type="button"
             onClick={handleSave}
