@@ -356,7 +356,7 @@ export default async function ScorecardPage({
       {justSaved && (
         <div className="max-w-md mx-auto mb-4">
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white">✓</span>
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-Black">✓</span>
             Saved Scores
           </div>
         </div>
@@ -383,7 +383,7 @@ export default async function ScorecardPage({
                     href={buildRoundHref(round.id)}
                     className={`flex-shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider border transition-colors ${
                       isActive
-                        ? 'bg-club-navy text-white border-club-navy'
+                        ? 'bg-club-navy text-Black border-club-navy'
                         : 'bg-club-paper text-club-navy border-club-gold/20 hover:border-club-gold'
                     }`}
                   >
@@ -414,7 +414,7 @@ export default async function ScorecardPage({
                     >
                       <span className="inline-flex items-center gap-2">
                         <span>{entry.name}</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold bg-club-navy text-white">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold bg-club-navy text-Black">
                           Selected
                         </span>
                       </span>
@@ -455,7 +455,7 @@ export default async function ScorecardPage({
                   <option key={entry.id} value={entry.id}>{entry.name}</option>
                 ))}
               </select>
-              <button className="bg-club-navy text-white px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-club-gold hover:text-club-navy transition-colors">
+              <button className="bg-club-navy text-Black px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-club-gold hover:text-club-navy transition-colors">
                 Load
               </button>
             </div>
