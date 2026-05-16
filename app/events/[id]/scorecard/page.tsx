@@ -751,7 +751,7 @@ export default async function ScorecardPage({
                 </div>
 
                 <div className="fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-club-cream via-club-cream/95 to-transparent px-6 pb-6 pt-10">
-                  <div className="max-w-md mx-auto rounded-2xl border border-club-navy/10 bg-white/92 p-3 shadow-lg backdrop-blur-sm">
+                  <div className="max-w-md mx-auto rounded-2xl border border-club-navy/10 bg-Black/92 p-3 shadow-lg backdrop-blur-sm">
                     <SaveCardButton disabled={!canEditSelected} />
                   </div>
                 </div>
