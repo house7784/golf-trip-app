@@ -234,11 +234,13 @@ export default async function EventDashboard({ params }: { params: Promise<{ id:
 		const round = roundById.get(row.round_id)
 		const holes = (round?.course_data?.holes || []) as CourseHole[]
 		const handicap = effectiveHandicapByUserId.get(row.user_id) || 0
-		const netTotal =
-			holes.length > 0
+		const grossTotal = totalScore(row.hole_scores)
+		const scoreToStore = round?.mode_key === 'scramble'
+			? grossTotal
+			: holes.length > 0
 				? calculateNetTotal(row.hole_scores, holes, handicap, handicapApplication)
-				: totalScore(row.hole_scores)
-		scoreMap.set(`${row.round_id}:${row.user_id}`, netTotal)
+				: grossTotal
+		scoreMap.set(`${row.round_id}:${row.user_id}`, scoreToStore)
 	})
 
 	const hasTeams = teams.length > 0

@@ -741,9 +741,11 @@ export default async function ScorecardPage({
                               disabled={!canEditSelected}
                               className={`w-full text-center text-2xl outline-none bg-transparent ${scoreColor}`}
                             />
-                            <p className="text-center text-[10px] text-gray-400 mt-1">
-                              Strokes: {strokeAllocationByPlayerId.get(selectedPlayerId)?.get(hole.number) || 0} ({strokeDots(strokeAllocationByPlayerId.get(selectedPlayerId)?.get(hole.number) || 0)})
-                            </p>
+                            {!isScramble && (
+                              <p className="text-center text-[10px] text-gray-400 mt-1">
+                                Strokes: {strokeAllocationByPlayerId.get(selectedPlayerId)?.get(hole.number) || 0} ({strokeDots(strokeAllocationByPlayerId.get(selectedPlayerId)?.get(hole.number) || 0)})
+                              </p>
+                            )}
                           </div>
                         </div>
 

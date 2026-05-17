@@ -352,9 +352,11 @@ export default async function PairScorecardsPage({
                           <span className="font-bold text-club-navy">{hole.number}</span>
                           <span className="text-gray-500 text-xs uppercase">Par {hole.par}</span>
                           <span className="text-gray-500 text-xs uppercase">HCP {hole.hcp ?? '--'}</span>
-                          <span className="text-gray-400 text-[10px]">
-                            Strokes {allocations.get(hole.number) || 0} ({strokeDots(allocations.get(hole.number) || 0)})
-                          </span>
+                          {activeRound.mode_key !== 'scramble' && (
+                            <span className="text-gray-400 text-[10px]">
+                              Strokes {allocations.get(hole.number) || 0} ({strokeDots(allocations.get(hole.number) || 0)})
+                            </span>
+                          )}
                         </div>
                         <span className="font-semibold text-club-navy">
                           {renderMarkedScore(numericHoleScore(scores, hole.number), Number(hole.par) || 0)}
